@@ -86,11 +86,22 @@ The script creates and maintains the following directory structure:
 
 ## Output Files
 
-### Science Analysis (YYYY-MM_science.json)
+At the end of the script, it will log something like:
+```
+Analysis complete for 2024-06
+Total papers processed: 564
+Papers skipped: 4
+JWST science papers found: 42
+Papers missing DOIs: 37
+```
+
+Results will be saved in the following files (typically in a `results` directory): 
+
+### JWST Science classifications (YYYY-MM_science.json)
 ```json
 {
   "2401.00934": {
-    "science": 1.0,
+    "jwstscience": 1.0,
     "reason": "Presents new JWST observations and analyzes the size evolution of quiescent galaxies using JWST/NIRCam data.",
     "quotes": [
       "we use new ultra-deep JWST/NIRCam imaging from the JWST Advanced Deep Extragalactic Survey (JADES)",
@@ -98,19 +109,19 @@ The script creates and maintains the following directory structure:
     ]
   },
   "2401.00990": {
-    "science": 0.0,
+    "jwstscience": 0.0,
     "reason": "'Webb' or 'JWST' not found in text (string search)",
     "quotes": []
   },
   "2401.00999": {
-    "science": -1.0,
+    "jwstscience": -1.0,
     "reason": "Analysis failed",
     "quotes": []
   }
 }
 ```
 
-### Skipped Papers (YYYY-MM_skipped.json)
+### Skipped papers (YYYY-MM_skipped.json)
 ```json
 {
   "2401.00123": {
@@ -124,7 +135,7 @@ The script creates and maintains the following directory structure:
 }
 ```
 
-### DOI Analysis (YYYY-MM_dois.json)
+### JWST DOI classifications (YYYY-MM_dois.json)
 ```json
 {
   "2401.00934": {
@@ -138,7 +149,8 @@ The script creates and maintains the following directory structure:
 }
 ```
 
-### Summary Report (YYYY-MM_report.json)
+### Summary report (YYYY-MM_report.json)
+
 ```json
 {
   "month": "2024-01",
@@ -166,7 +178,7 @@ The script creates and maintains the following directory structure:
 
 ## Scoring System
 
-### Science Score
+### JWST Science Score
 - -1.0: Analysis failed (e.g., paper too long)
 - 0.0: JWST not mentioned or not a science paper
 - 0.2: Very low confidence of JWST science
@@ -174,12 +186,12 @@ The script creates and maintains the following directory structure:
 - 0.8: High confidence of JWST science
 - 1.0: Definite JWST science
 
-### DOI Score
+### JWST DOI Score
 - 0.0: No DOI provided
 - 0.5: DOI mentioned but unclear if for JWST data
 - 1.0: Clear JWST data DOI present
 
-Papers are considered JWST science papers if they score ≥ 0.5 on the science scale, and are flagged as properly citing JWST data if they score ≥ 0.8 on the DOI scale.
+We have tunable thresholds for what should or shouldn't be reported as JWST science or a valid DOI. By default, papers are considered JWST science papers if they score over `0.5` on the science scale, and are flagged as properly citing JWST data if they score `0.8` on the DOI scale.
 
 ## Caching
 
