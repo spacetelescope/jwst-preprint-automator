@@ -21,8 +21,8 @@ logging.basicConfig(
 
 class JWSTScienceLabelerModel(BaseModel):
     quotes: list[str] = Field(..., description="A list of quotes supporting the reason")
-    science: float = Field(..., description="Whether the paper contains JWST science, scored between 0 and 1")
-    reason: str = Field(..., description="Justification for the given 'science' score")
+    jwstscience: float = Field(..., description="Whether the paper contains JWST science, scored between 0 and 1")
+    reason: str = Field(..., description="Justification for the given 'jwstscience' score")
 
 class JWSTDOILabelerModel(BaseModel):
     quotes: list[str] = Field(..., description="A list of quotes supporting the reason")
@@ -229,8 +229,8 @@ class JWSTPreprintDOIAnalyzer:
         """
         return "jwst" in text.lower() or "webb" in text.lower()
 
-    def _analyze_science(self, paper: Dict[str, str]) -> Dict:
-        """Analyze paper for JWST science content."""
+    def _analyze_science(self, paper: Dict[str, str], validate: bool = True) -> Dict:
+        """Analyze paper for JWST science content with optional validation."""
         logging.info(f"Analyzing JWST science content for {paper['arxiv_id']}")
         
         txt_path = self.texts_dir / f"{paper['arxiv_id']}.txt"
@@ -242,7 +242,7 @@ class JWSTPreprintDOIAnalyzer:
             if not self.force_llm and not self._precheck_jwst_mention(paper_text):
                 logging.info(f"Paper {paper['arxiv_id']} failed pre-check (no JWST/Webb mention)")
                 result = {
-                    "science": 0.0,
+                    "jwstscience": 0.0,
                     "quotes": [],
                     "reason": "'Webb' or 'JWST' not found in text (string search)"
                 }
@@ -258,54 +258,21 @@ You must determine the likelihood of whether the attached paper text is a James 
 
 Papers that present and/or analyze JWST observations (e.g. using the instruments NIRCam, NIRSpec, NIRISS, MIRI, and FGS) are absolutely science papers. Science can also include comparisons to another paper result based on JWST. Even if the data are distilled into some other JWST science result, and is used as a comparison point in the current paper, then it should be considered a JWST science paper. Note that the JWST science result doesn't have to be the main finding or purpose of the paper, but JWST data must be used to derive some new research. However, mentioning JWST data purely as discussion or motivation does not count. Also, JWST mock data (simulation data) by itself does not mean it's a science paper; JWST science papers must be based on actual JWST observations. Other observatories are not relevant here and should not impact the score.
 
-Include a JSON object with a "science" score, a "reason" or justification, and a list of "quotes" that directly support the reason. However, since you are an autoregressive LLM, you should cite the quotes first, and then give your science score.
+Include a JSON object with a "jwstscience" score, a "reason" or justification, and a list of "quotes" that directly support the reason. However, since you are an autoregressive LLM, you should cite the quotes first, and then give your science score.
 
-The score for "science" is a float between 0 and 1, where:
+The score for "jwstscience" is a float between 0 and 1, where:
 
 0 - JWST is not mentioned at all at all
-0.2 - very low confidence that the paper contains science results using JWST
-0.5 - moderate confidence that the paper contains JWST science
-0.8 - high confidence that the paper contains new science with JWST
+0.2 - very low confidence that the paper introduces science results using JWST
+0.5 - moderate confidence that the paper introduces JWST science
+0.8 - high confidence that the paper introduces new science with JWST
 1.0 - absolutely sure that JWST science is presented in the paper
-
-Please only return JSON using an example like one of the following:
-
-{{
-    "quotes": ["may be confirmed by follow-up JWST observations of the same systems (Smith et al., in prep)"],
-    "science": 0.2,
-    "reason": "motivates future JWST observations that are not presented here"
-}}
-
-{{
-    "quotes": ["we model using the NIRSpec constraints from Berg et al. (2024) to conclusively rule out shock ionization"],
-    "science": 0.8,
-    "reason": "Includes JWST data from another paper to establish a new result that is briefly discussed"
-}}
-
-
-{{
-    "quotes": ["structure formation at very high redshifts, e.g., as has recently been shown in recent JWST and ALMA surveys"],
-    "science": 0.1,
-    "reason": "is generically motivated by observations but does actually use JWST data"
-}}
-
-{{
-    "quotes": ["we describe our multi-cycle JWST campaign (program ID 1307)"],
-    "science": 1.0,
-    "reason": "New JWST NIRCam observations are presented"
-}}
-
-{{
-    "quotes": [],
-    "science": 0.0,
-    "reason": "does not mention JWST or Webb at all",
-}}
 
 Here is the paper converted into plaintext format (please ignore line breaks or malformed tables): 
 {paper_text}
 """
-        
-            response = client.beta.chat.completions.parse(
+            
+            result = client.beta.chat.completions.parse(
                 model="gpt-4o-mini-2024-07-18",
                 messages=[
                     {
@@ -320,15 +287,62 @@ Here is the paper converted into plaintext format (please ignore line breaks or 
                 response_format=JWSTScienceLabelerModel,
             )
             
-            result = json.loads(response.choices[0].message.content)
+            initial_result = json.loads(result.choices[0].message.content)
+            
+            # If validation is requested and we have a non-zero score, validate the result
+            if validate and initial_result["jwstscience"] > 0:
+                validation_prompt = f"""
+You are validating a previous analysis of whether a paper contains JWST science results.
+Here are the quotes that were identified:
+
+{json.dumps(initial_result["quotes"], indent=2)}
+
+And here is the reason given:
+"{initial_result["reason"]}"
+
+With an assigned score of: {initial_result["jwstscience"]}
+
+Please validate whether this score accurately reflects the JWST science content based on these quotes. You MUST keep the exact same quotes, but you may adjust the score and/or provide a revised reason if you believe the initial assessment was incorrect. 
+
+For example, the original quotes may cite another paper that did JWST science, while the original reason incorrectly stated that new JWST science was being presented. In that case, you should lower the score and change the reasoning to say only that prior JWST scientific results were discussed.
+
+Remember the scoring criteria:
+0 - JWST is not mentioned at all
+0.2 - very low confidence that the paper introduces science results using JWST
+0.5 - moderate confidence that the paper introduces JWST science
+0.8 - high confidence that the paper introduces new science with JWST
+1.0 - absolutely sure that JWST science is presented in the paper
+
+Return a JSON response with the same structure, keeping the quotes identical but potentially
+updating the score and/or reason if needed.
+"""
+                
+                validation_result = client.beta.chat.completions.parse(
+                    model="gpt-4o-mini-2024-07-18",
+                    messages=[
+                        {
+                            "role": "developer",
+                            "content": "You validate whether quotes from a paper support the assigned JWST science score."
+                        },
+                        {
+                            "role": "user",
+                            "content": validation_prompt
+                        }
+                    ],
+                    response_format=JWSTScienceLabelerModel,
+                )
+                
+                final_result = json.loads(validation_result.choices[0].message.content)
+            else:
+                final_result = initial_result
             
             # Cache the result
             analyzed = self._load_cache(self.science_cache)
-            analyzed[paper['arxiv_id']] = result
+            analyzed[paper['arxiv_id']] = final_result
             self._save_cache(self.science_cache, analyzed)
             
-            return result
-            
+            return final_result
+        
         except BadRequestError as e:
             if "maximum context length" in str(e).lower():
                 logging.warning(f"Paper {paper['arxiv_id']} exceeds token limit")
@@ -336,15 +350,15 @@ Here is the paper converted into plaintext format (please ignore line breaks or 
             else:
                 logging.warning(f"OpenAI API error for {paper['arxiv_id']}: {str(e)}")
                 self._mark_as_skipped(paper, f"OpenAI API error: {str(e)}")
-            return {"science": -1.0, "reason": "Analysis failed", "quotes": []}
+            return {"jwstscience": -1.0, "reason": "Analysis failed", "quotes": []}
 
     def _needs_doi_analysis(self, paper: Dict[str, str]) -> bool:
         """Check if paper needs DOI analysis."""
         analyzed = self._load_cache(self.doi_cache)
         return self.reprocess or paper['arxiv_id'] not in analyzed
 
-    def _analyze_doi(self, paper: Dict[str, str]) -> Dict:
-        """Analyze paper for JWST DOIs."""
+    def _analyze_doi(self, paper: Dict[str, str], validate: bool = True) -> Dict:
+        """Analyze paper for JWST DOIs with optional validation."""
         logging.info(f"Analyzing JWST DOIs for {paper['arxiv_id']}")
         
         txt_path = self.texts_dir / f"{paper['arxiv_id']}.txt"
@@ -358,7 +372,7 @@ You must determine whether the appended paper contains a JWST DOI.
 
 It can be assumed that the paper reports scientific results with the James Webb Space Telescope (JWST). We need to scan the paper for a digital object identifier (DOI) that corresponds to the JWST data. The DOI should start with the string "10.17909", otherwise it is not correct. Also, it is possible that other data are associated with DOIs, but the JWST data are not given a DOI; THIS DOES NOT COUNT. Or perhaps the JWST program ID is mentioned, but no DOI is given; again THIS DOES NOT COUNT. Note that the DOI is often found in the Acknowledgments or the Data section.
 
-Include a JSON object with a "jwstdoi" score, a "reason" or justification, and a list of exact "quotes" that directly support the reason given for the score. However, since you are an autoregressive LLM, you should cite the quotes first, and then give your jwstdoi score.
+Include a JSON object with a "jwstdoi" score, a "reason" or justification, and a list of exact "quotes" that directly support the reason. However, since you are an autoregressive LLM, you should cite the quotes first, and then give your jwstdoi score.
 
 The score for "jwstdoi" is a float between 0 and 1, where we give the rough guidelines:
 
@@ -367,32 +381,11 @@ The score for "jwstdoi" is a float between 0 and 1, where we give the rough guid
 0.5 - A DOI is provided, but it is not clear whether it pertains to the JWST science data or some other data set
 1.0 - A DOI beginning with "10.17909/" is explicitly included, or a URL, and the surrounding text explicitly mentions that this DOI is for the JWST data. 
 
-Please only return JSON using an example like one of the following:
-
-{{
-    "quotes": [
-      "we present new JWST/NIRSpec data as part of the CEERS data release",
-      "We acknowledge support from JWST funding",
-      ],
-    "jwstdoi": 0.1,
-    "reason": "Acknowledgments are present, but DOIs are not"
-}}
-
-{{
-    "quotes": [
-      "This work is based on observations made with the NASA/ESA/CSA James Webb Space Telescope. The data were obtained from the Mikulski Archive for Space Telescopes",
-      "The specific observations analyzed can be accessed via 10.17909/9bdf-jn24."
-      ],
-    "jwstdoi": 1.0,
-    "reason": "A DOI or link string is given, and the preceding quote confirms that it is for the new JWST data."
-}}
-
-
 Here is the paper converted into plaintext format (please ignore line breaks or malformed tables): 
 {paper_text}
 """
-        
-            response = client.beta.chat.completions.parse(
+
+            result = client.beta.chat.completions.parse(
                 model="gpt-4o-mini-2024-07-18",
                 messages=[
                     {
@@ -407,14 +400,60 @@ Here is the paper converted into plaintext format (please ignore line breaks or 
                 response_format=JWSTDOILabelerModel,
             )
 
-            result = json.loads(response.choices[0].message.content)
+            initial_result = json.loads(result.choices[0].message.content)
+            
+            # If validation is requested and we have a non-zero score, validate the result
+            if validate and initial_result["jwstdoi"] > 0:
+                validation_prompt = f"""
+You are validating a previous analysis of whether a paper properly cites JWST data with DOIs.
+Here are the quotes that were identified:
+
+{json.dumps(initial_result["quotes"], indent=2)}
+
+And here is the reason given:
+"{initial_result["reason"]}"
+
+With an assigned score of: {initial_result["jwstdoi"]}
+
+Please validate whether this score accurately reflects the JWST DOI citation based on these quotes. You MUST keep the exact same quotes, but you may adjust the score and/or provide a revised reason if you believe the initial assessment was incorrect. 
+
+For example, the original quotes may quote an acknowledgment for JWST funding, but not list a specific DOI, while the original reason incorrectly stated that there was a DOI. In that case, you should lower the jwstdoi score and state that an acknowledgment (but no DOI) was provided.
+
+Remember the scoring criteria:
+0 - No DOI is provided
+0.1 - No DOI number is provided, although a program ID or proposal PI is mentioned
+0.5 - A DOI is provided, but it is not clear whether it pertains to the JWST science data
+1.0 - A DOI beginning with "10.17909/" is explicitly included and clearly refers to JWST data
+
+Return a JSON response with the same structure, keeping the quotes identical but potentially
+updating the score and/or reason if needed.
+"""
+                
+                validation_result = client.beta.chat.completions.parse(
+                    model="gpt-4o-mini-2024-07-18",
+                    messages=[
+                        {
+                            "role": "developer",
+                            "content": "You validate whether quotes from a paper support the assigned JWST DOI score."
+                        },
+                        {
+                            "role": "user",
+                            "content": validation_prompt
+                        }
+                    ],
+                    response_format=JWSTDOILabelerModel,
+                )
+                
+                final_result = json.loads(validation_result.choices[0].message.content)
+            else:
+                final_result = initial_result
             
             # Cache the result
             analyzed = self._load_cache(self.doi_cache)
-            analyzed[paper['arxiv_id']] = result
+            analyzed[paper['arxiv_id']] = final_result
             self._save_cache(self.doi_cache, analyzed)
             
-            return result
+            return final_result
             
         except BadRequestError as e:
             if "maximum context length" in str(e).lower():
@@ -433,14 +472,14 @@ Here is the paper converted into plaintext format (please ignore line breaks or 
         
         total_papers = len(science_results) + len(skipped_results)
         science_papers = sum(1 for r in science_results.values() 
-                           if r["science"] >= self.science_threshold)
+                           if r["jwstscience"] >= self.science_threshold)
         papers_with_dois = sum(1 for r in doi_results.values() 
                              if r["jwstdoi"] >= self.doi_threshold)
         
         report = {
             "month": self.month,
             "thresholds": {
-                "science": self.science_threshold,
+                "jwstscience": self.science_threshold,
                 "doi": self.doi_threshold
             },
             "total_papers": total_papers,
@@ -452,12 +491,12 @@ Here is the paper converted into plaintext format (please ignore line breaks or 
             "skipped_details": skipped_results,
             "detailed_results": {
                 arxiv_id: {
-                    "science_score": science_results[arxiv_id]["science"],
+                    "science_score": science_results[arxiv_id]["jwstscience"],
                     "doi_score": doi_results.get(arxiv_id, {}).get("jwstdoi", 0),
                     "arxiv_url": f"https://arxiv.org/abs/{arxiv_id}"
                 }
                 for arxiv_id in science_results
-                if science_results[arxiv_id]["science"] >= self.science_threshold
+                if science_results[arxiv_id]["jwstscience"] >= self.science_threshold
             }
         }
         
@@ -481,7 +520,7 @@ Here is the paper converted into plaintext format (please ignore line breaks or 
                     if self._download_paper(paper):
                         if self._convert_to_text(paper):
                             processed_papers.append(paper)
-                        # time.sleep(2)  # Be nice to the arXiv API
+                        time.sleep(1)  # Be nice to the arXiv API
                 else:
                     processed_papers.append(paper)
             
@@ -490,7 +529,7 @@ Here is the paper converted into plaintext format (please ignore line breaks or 
             for paper in processed_papers:
                 if self._needs_science_analysis(paper):
                     result = self._analyze_science(paper)
-                    if result["science"] >= self.science_threshold:
+                    if result["jwstscience"] >= self.science_threshold:
                         science_papers.append(paper)
             
             # 4. Check DOIs for science papers
