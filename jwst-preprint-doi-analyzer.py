@@ -31,7 +31,7 @@ class JWSTDOILabelerModel(BaseModel):
 
 class JWSTPreprintDOIAnalyzer:
     def __init__(self, 
-                 month: str,  # Format: YYYY-MM
+                 year_month: str,  # Format: YYYY-MM
                  output_dir: Path,
                  science_threshold: float = 0.5,
                  doi_threshold: float = 0.8,
@@ -40,7 +40,7 @@ class JWSTPreprintDOIAnalyzer:
                  reprocess: bool = False,
                  force_llm: bool = False):
         """Initialize the JWST paper analyzer."""
-        self.month = month
+        self.year_month = year_month
         self.reprocess = reprocess
         self.science_threshold = science_threshold
         self.doi_threshold = doi_threshold
@@ -60,10 +60,10 @@ class JWSTPreprintDOIAnalyzer:
         self._setup_directories()
         
         # Setup cache files
-        self.download_cache = self.results_dir / f"{month}_downloaded.json"
-        self.science_cache = self.results_dir / f"{month}_science.json"
-        self.doi_cache = self.results_dir / f"{month}_dois.json"
-        self.skipped_cache = self.results_dir / f"{month}_skipped.json"  # New cache for skipped papers
+        self.download_cache = self.results_dir / f"{self.year_month}_downloaded.json"
+        self.science_cache = self.results_dir / f"{self.year_month}_science.json"
+        self.doi_cache = self.results_dir / f"{self.year_month}_dois.json"
+        self.skipped_cache = self.results_dir / f"{self.year_month}_skipped.json"  # New cache for skipped papers
 
     def _setup_directories(self):
         """Create necessary directories if they don't exist."""
@@ -84,19 +84,36 @@ class JWSTPreprintDOIAnalyzer:
 
     def _get_paper_list(self) -> List[Dict[str, str]]:
         """Fetch list of astronomy papers for the specified month from ADS."""
-        logging.info(f"Fetching paper list for {self.month}")
+        logging.info(f"Fetching paper list for {self.year_month}")
         
-        url = "https://ui.adsabs.harvard.edu/v1/search/query"
+        url = "https://api.adsabs.harvard.edu/v1/search/query"
+        # params = {
+        #     "q": "database:astronomy",
+        #     "fq": [
+        #         "bibstem:arxiv",
+        #         f"pubdate:{self.year_month}"
+        #     ],
+        #     "fl": ["identifier", "bibcode"],
+        #     "rows": 2000,
+        #     "sort": "bibcode asc"
+        # }
+        try:
+            year_full, month = self.year_month.split('-')
+            year_short = year_full[2:] # Get the last two digits of the year (YY)
+            arxiv_pattern = f"arXiv:{year_short}{month}.*"
+        else:
+            raise ValueError("`year_month` argument format is not YYYY-MM")
+
         params = {
             "q": "database:astronomy",
             "fq": [
-                "bibstem:arxiv",
-                f"pubdate:{self.month}"
+                f'identifier:"{arxiv_pattern}"'
             ],
             "fl": ["identifier", "bibcode"],
             "rows": 2000,
             "sort": "bibcode asc"
         }
+
         
         headers = {"Authorization": f"Bearer {self.ads_key}"}
         
@@ -268,6 +285,38 @@ The score for "jwstscience" is a float between 0 and 1, where:
 0.8 - high confidence that the paper introduces new science with JWST
 1.0 - absolutely sure that JWST science is presented in the paper
 
+Please only return JSON using an example like one of the following:
+{{
+    "quotes": ["may be confirmed by follow-up JWST observations of the same systems (Smith et al., in prep)"],
+    "jwstscience": 0.2,
+    "reason": "motivates future JWST observations that are not presented here"
+}}
+
+{{
+    "quotes": ["we model using the NIRSpec constraints from Berg et al. (2024) to conclusively rule out shock ionization"],
+    "jwstscience": 0.8,
+    "reason": "Includes JWST data from another paper to establish a new result that is briefly discussed"
+}}
+
+
+{{
+    "quotes": ["structure formation at very high redshifts, e.g., as has recently been shown in recent JWST and ALMA surveys"],
+    "jwstscience": 0.1,
+    "reason": "is generically motivated by observations but does actually use JWST data"
+}}
+
+{{
+    "quotes": ["we describe our multi-cycle JWST campaign (program ID 1307)"],
+    "jwstscience": 1.0,
+    "reason": "New JWST NIRCam observations are presented"
+}}
+
+{{
+    "quotes": [],
+    "jwstscience": 0.0,
+    "reason": "does not mention JWST or Webb at all",
+}}
+
 Here is the paper converted into plaintext format (please ignore line breaks or malformed tables): 
 {paper_text}
 """
@@ -312,6 +361,38 @@ Remember the scoring criteria:
 0.5 - moderate confidence that the paper introduces JWST science
 0.8 - high confidence that the paper introduces new science with JWST
 1.0 - absolutely sure that JWST science is presented in the paper
+
+Please only return JSON using an example like one of the following:
+{{
+    "quotes": ["may be confirmed by follow-up JWST observations of the same systems (Smith et al., in prep)"],
+    "jwstscience": 0.2,
+    "reason": "motivates future JWST observations that are not presented here"
+}}
+
+{{
+    "quotes": ["we model using the NIRSpec constraints from Berg et al. (2024) to conclusively rule out shock ionization"],
+    "jwstscience": 0.8,
+    "reason": "Includes JWST data from another paper to establish a new result that is briefly discussed"
+}}
+
+
+{{
+    "quotes": ["structure formation at very high redshifts, e.g., as has recently been shown in recent JWST and ALMA surveys"],
+    "jwstscience": 0.1,
+    "reason": "is generically motivated by observations but does actually use JWST data"
+}}
+
+{{
+    "quotes": ["we describe our multi-cycle JWST campaign (program ID 1307)"],
+    "jwstscience": 1.0,
+    "reason": "New JWST NIRCam observations are presented"
+}}
+
+{{
+    "quotes": [],
+    "jwstscience": 0.0,
+    "reason": "does not mention JWST or Webb at all",
+}}
 
 Return a JSON response with the same structure, keeping the quotes identical but potentially
 updating the score and/or reason if needed.
@@ -381,6 +462,26 @@ The score for "jwstdoi" is a float between 0 and 1, where we give the rough guid
 0.5 - A DOI is provided, but it is not clear whether it pertains to the JWST science data or some other data set
 1.0 - A DOI beginning with "10.17909/" is explicitly included, or a URL, and the surrounding text explicitly mentions that this DOI is for the JWST data. 
 
+Please only return JSON using an example like one of the following:
+
+{{
+    "quotes": [
+      "we present new JWST/NIRSpec data as part of the CEERS data release",
+      "We acknowledge support from JWST funding",
+      ],
+    "jwstdoi": 0.1,
+    "reason": "Acknowledgments are present, but DOIs are not"
+}}
+
+{{
+    "quotes": [
+      "This work is based on observations made with the NASA/ESA/CSA James Webb Space Telescope. The data were obtained from the Mikulski Archive for Space Telescopes",
+      "The specific observations analyzed can be accessed via 10.17909/9bdf-jn24."
+      ],
+    "jwstdoi": 1.0,
+    "reason": "A DOI or link string is given, and the preceding quote confirms that it is for the new JWST data."
+}}
+
 Here is the paper converted into plaintext format (please ignore line breaks or malformed tables): 
 {paper_text}
 """
@@ -424,6 +525,27 @@ Remember the scoring criteria:
 0.1 - No DOI number is provided, although a program ID or proposal PI is mentioned
 0.5 - A DOI is provided, but it is not clear whether it pertains to the JWST science data
 1.0 - A DOI beginning with "10.17909/" is explicitly included and clearly refers to JWST data
+
+Please only return JSON using an example like one of the following:
+
+{{
+    "quotes": [
+      "we present new JWST/NIRSpec data as part of the CEERS data release",
+      "We acknowledge support from JWST funding",
+      ],
+    "jwstdoi": 0.1,
+    "reason": "Acknowledgments are present, but DOIs are not"
+}}
+
+{{
+    "quotes": [
+      "This work is based on observations made with the NASA/ESA/CSA James Webb Space Telescope. The data were obtained from the Mikulski Archive for Space Telescopes",
+      "The specific observations analyzed can be accessed via 10.17909/9bdf-jn24."
+      ],
+    "jwstdoi": 1.0,
+    "reason": "A DOI or link string is given, and the preceding quote confirms that it is for the new JWST data."
+}}
+
 
 Return a JSON response with the same structure, keeping the quotes identical but potentially
 updating the score and/or reason if needed.
@@ -477,7 +599,7 @@ updating the score and/or reason if needed.
                              if r["jwstdoi"] >= self.doi_threshold)
         
         report = {
-            "month": self.month,
+            "month": self.year_month,
             "thresholds": {
                 "jwstscience": self.science_threshold,
                 "doi": self.doi_threshold
@@ -500,7 +622,7 @@ updating the score and/or reason if needed.
             }
         }
         
-        report_path = self.results_dir / f"{self.month}_report.json"
+        report_path = self.results_dir / f"{self.year_month}_report.json"
         with open(report_path, 'w') as f:
             json.dump(report, f, indent=2)
         
@@ -520,7 +642,7 @@ updating the score and/or reason if needed.
                     if self._download_paper(paper):
                         if self._convert_to_text(paper):
                             processed_papers.append(paper)
-                        time.sleep(1)  # Be nice to the arXiv API
+                        #time.sleep(1)  # Be nice to the arXiv API
                 else:
                     processed_papers.append(paper)
             
@@ -539,7 +661,7 @@ updating the score and/or reason if needed.
             
             # 5. Generate summary report
             report = self._generate_report()
-            logging.info(f"Analysis complete for {self.month}")
+            logging.info(f"Analysis complete for {self.year_month}")
             logging.info(f"Total papers processed: {report['processed_papers']}")
             logging.info(f"Papers skipped: {report['skipped_papers']}")
             logging.info(f"JWST science papers found: {report['jwst_science_papers']}")
@@ -553,7 +675,7 @@ updating the score and/or reason if needed.
 def main():
     parser = argparse.ArgumentParser(description="Analyze arXiv papers for JWST science and DOIs")
     parser.add_argument(
-        "month",
+        "year_month",
         help="Month to analyze in YYYY-MM format (e.g., 2024-01)"
     )
     parser.add_argument(
@@ -603,7 +725,7 @@ def main():
     
     try:
         analyzer = JWSTPreprintDOIAnalyzer(
-            month=args.month,
+            year_month=args.year_month,
             output_dir=args.output_dir,
             science_threshold=args.science_threshold,
             doi_threshold=args.doi_threshold,
