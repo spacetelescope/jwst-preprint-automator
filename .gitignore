@@ -1,5 +1,9 @@
 .env
 __pycache__
+evaluation-sample
 results/
+results_original
 papers/
 texts/
+
+.ipynb_checkpoints
