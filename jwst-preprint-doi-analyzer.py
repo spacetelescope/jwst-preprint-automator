@@ -36,7 +36,7 @@ class JWSTPreprintDOIAnalyzer:
     SCIENCE_KEYWORDS = [
         "jwst", "james webb space telescope", "webb telescope", "webb",
         "nircam", "nirspec", "miri", "niriss", "fgs",
-        "jwst observation", "webb observation", "program id", "proposal id",
+        "program id", "proposal id",
     ]
     DOI_KEYWORDS = [
         "mast", "mast archive",
