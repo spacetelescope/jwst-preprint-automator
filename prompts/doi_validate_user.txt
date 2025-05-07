@@ -1,0 +1,21 @@
+**Original Analysis:**
+Quotes: {original_quotes} 
+Score: {original_score}
+Reason: {original_reason}
+
+**Scoring Guidelines (Reminder):**
+*   0.0: No DOI evidence.
+*   0.1: Program ID/ack mentioned, no DOI string.
+*   0.2-0.4: DOI present, but not '10.17909/' or not clearly linked to JWST data in quotes.
+*   0.5-0.7: '10.17909/' DOI present, weak link to JWST data in quotes.
+*   0.8-1.0: '10.17909/' DOI present, explicitly linked to JWST data in quotes.
+
+**Task:**
+Does this paper have a valid JWST DOI beginning with '10.17909/'? Validate the score based *only* on the provided quotes and guidelines. Return JSON with potentially revised score/reason, but IDENTICAL quotes.
+
+**JSON Output Format:**
+{{
+    "quotes": ["Exact quote 1 from excerpts...", "Exact quote 2..."], // MUST BE IDENTICAL TO BEFORE
+    "jwstdoi": <float between 0.0 and 1.0>,
+    "reason": "Validated justification based ONLY on the original quotes and DOI prefix '10.17909/'."
+}}

@@ -1,0 +1,29 @@
+Re-analyze the following excerpts from an astronomy paper to determine the likelihood it presents new science results with the James Webb Space Telescope (JWST). DO NOT COUNT citations to other papers or prior works. Only consider if the snippets support that this current paper is a JWST science paper.
+
+**Original Analysis:**
+Quotes: {original_quotes} 
+Score: {original_score}
+Reason: {original_reason}
+
+**Task:**
+Update the "jwstscience" score based *only* on the provided quotes and guidelines. Return JSON with potentially revised score/reason, but IDENTICAL quotes.
+
+**Notes:**
+*   Quotes like "our JWST data" or "our new findings with JWST" indicate a high "jwstscience" score.
+*   Quotes like "Recent results from JWST" or "Future JWST observations" do not support a high "jwstscience" score and should not be included.
+*   Quotes like "The Growth of the First Massive Black Holes from JWST/NIRSpec" are titles of other papers; **citations to other JWST papers should not be considered at all.**
+*   Just because JWST is frequently mentioned many times does not mean that this paper should be given a high "jwstscience".
+
+**Scoring Guidelines (Reminder):**
+*   0.0: No JWST science evidence in quotes.
+*   0.1-0.3: Mentions JWST, but no clear new science from quotes.
+*   0.4-0.6: Moderate indication of JWST data use, lacks definitive new findings in quotes.
+*   0.7-0.9: Strong indication of new JWST science derived in quotes.
+*   1.0: Explicit statement of new JWST observations/analysis/results in quotes.
+
+**JSON Output Format:**
+{{
+    "quotes": ["Exact quote 1 from excerpts...", "Exact quote 2..."], // MUST BE IDENTICAL TO BEFORE
+    "jwstscience": <float between 0.0 and 1.0>,
+    "reason": "Validated justification based ONLY on the original quotes."
+}}

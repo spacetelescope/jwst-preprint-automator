@@ -1,0 +1,27 @@
+Analyze the following excerpts from an astronomy paper to determine the likelihood it presents new science results with the James Webb Space Telescope (JWST). DO NOT COUNT citations to other papers or prior works. Only consider if the snippets support that this current paper is a JWST science paper.
+
+**Task:**
+Determine whether *this paper* is a JWST science paper. Return a JSON object adhering to the specified format. The 'quotes' MUST be exact substrings copied from the provided excerpts below. 
+
+**Notes:**
+*   Quotes like "our JWST data" or "our new findings with JWST" indicate a high "jwstscience" score.
+*   Quotes like "Recent results from JWST" or "Future JWST observations" do not support a high "jwstscience" score and should not be included.
+*   Quotes like "The Growth of the First Massive Black Holes from JWST/NIRSpec" are titles of other papers; **citations to other JWST papers should not be considered at all.**
+*   Just because JWST is frequently mentioned many times does not mean that this paper should be given a high "jwstscience".
+
+**Scoring Guidelines:**
+*   **0.0**: No mention of JWST/Webb or only mentions future plans, proposals, simulations, or funding without presenting data/results from it within these excerpts.
+*   **0.1-0.3**: Mentions JWST/Webb or its instruments, maybe cites prior JWST work, but the excerpts don't clearly show *new* analysis or results from JWST in *this* paper. Could be purely motivational or comparative discussion, or the excxerpt might simply be the title of a paper from the References section.
+*   **0.4-0.6**: Moderate indication that JWST data/results are used (e.g., mentions analyzing JWST data, shows plots potentially from JWST), but the excerpts lack definitive statements of *new* findings derived from it. Cannot simply cite other JWST papers.
+*   **0.7-0.9**: Strong indication from the excerpts that *new* JWST observations are presented or analyzed to derive new scientific results in this paper, even if new JWST data are presented just for a single table or plot.
+*   **1.0**: Excerpts explicitly state that new JWST observations/data (e.g., from NIRCam, NIRSpec, MIRI, NIRISS) were obtained/analyzed for this work and new results are presented.
+
+**Excerpts:**
+{snippets_text}
+
+**JSON Output Format:**
+{{
+    "quotes": ["Exact quote 1 from excerpts...", "Exact quote 2..."],
+    "jwstscience": <float between 0.0 and 1.0>,
+    "reason": "Justification based ONLY on the excerpts."
+}}

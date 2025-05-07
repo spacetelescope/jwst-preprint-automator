@@ -1,0 +1,21 @@
+Analyze the following excerpts from an astronomy paper to determine if a JWST data DOI (specifically starting with '10.17909/') is cited for the data used in the paper.
+
+**Scoring Guidelines:**
+*   **0.0**: No mention of DOIs, '10.17909', or data availability sections in the excerpts.
+*   **0.1**: Mentions JWST program IDs, acknowledgments, or MAST, but no DOI string is present in the excerpts.
+*   **0.2-0.4**: Mentions DOIs, but none start with '10.17909/' OR a '10.17909/' DOI is mentioned but the excerpts don't clearly link it to the *JWST data* used in *this specific study* (could be for other data, software, or general archive).
+*   **0.5-0.7**: A DOI starting with '10.17909/' is present, and the surrounding text weakly suggests it might be for the JWST data (e.g., appears in data section near JWST mention).
+*   **0.8-1.0**: A DOI starting with '10.17909/' MUST BE present, and the excerpts explicitly state or strongly imply this DOI refers to the specific JWST observations/datasets analyzed in this paper (e.g., "The JWST data used... can be found at doi:10.17909/...")
+
+**Task:**
+Return a JSON object adhering to the specified format. The 'quotes' MUST be exact substrings copied from the provided excerpts below.
+
+**Excerpts:**
+{snippets_text}
+
+**JSON Output Format:**
+{{
+    "quotes": ["Exact quote 1 from excerpts...", "Exact quote 2..."],
+    "jwstdoi": <float between 0.0 and 1.0>,
+    "reason": "Justification based ONLY on the excerpts and the DOI prefix '10.17909/'."
+}}
