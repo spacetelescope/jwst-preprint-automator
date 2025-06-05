@@ -4,74 +4,87 @@ This tool automatically analyzes astronomy preprints from arXiv to identify pape
 
 ## Purpose
 
-The script performs several tasks:
+The package performs several tasks:
 1.  **Batch Mode:** Downloads astronomy preprints from arXiv via the NASA ADS API for a specified month (`--year-month`).
 2.  **Single Paper Mode:** Downloads a specific preprint from arXiv given its ID (`--arxiv-id`).
 3.  Converts downloaded PDFs to text using the `pdftext` command-line tool.
 4.  Extracts relevant text snippets based on predefined keywords.
 5.  Optionally reranks these snippets for relevance using the Cohere API.
-6.  Uses OpenAI GPT models (e.g., `gpt-4.1-mini-2025-04-14`) to:
+6.  Uses OpenAI GPT models to:
     * Identify papers containing JWST science.
     * For papers with JWST science, check if they include proper JWST data DOIs (specifically those with the prefix `10.17909`).
 7.  Optionally performs a second LLM call to validate the initial analysis.
 8.  Generates a detailed JSON summary report for batch processing or outputs JSON results to stdout for single paper analysis.
 9.  Manages LLM interaction through customizable prompt templates stored in a `prompts/` directory.
 
-## Prerequisites
+## Installation
+
+### Prerequisites
+
+1. Python 3.8 or higher
+2. Virtual environment (recommended)
+
+### Install from Source
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd jwst-preprint-doi-automator
+
+# Create virtual environment (using uv, venv, or conda)
+uv venv  # or: python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install the package
+pip install -e .
+```
 
 ### Environment Variables
-The following environment variables should be set:
+
+Create a `.env` file in the project root or set the following environment variables:
 -   `ADS_API_KEY`: API key for NASA ADS (required for batch mode).
 -   `OPENAI_API_KEY`: API key for OpenAI (required).
 -   `COHERE_API_KEY`: API key for Cohere (optional; if not provided, snippet reranking will be skipped).
 
-### External Tools
--   **`pdftext`**: This command-line tool must be installed and accessible in your system's PATH. It is used for converting PDF files to plain text.
-
-### Python Packages
-Required Python packages:
-```bash
-pip install openai requests pydantic nltk cohere
-```
-(Note: `nltk` may also require you to download the 'punkt' tokenizer: `python -c "import nltk; nltk.download('punkt')"`)
+The package will automatically load variables from `.env` if it exists.
 
 ## Usage
 
-The script can be run in two modes: batch processing for a whole month or analysis of a single paper.
+After installation, the `jwst-preprint-analyzer` command will be available.
 
 ### Batch Mode (by Month)
 Analyzes all astronomy preprints for a given month and year.
 ```bash
-python jwst-preprint-doi-analyzer.py --year-month YYYY-MM
+jwst-preprint-analyzer --year-month YYYY-MM
 ```
 Example:
 ```bash
-python jwst-preprint-doi-analyzer.py --year-month 2024-01 --output-dir ./analysis_results --prompts-dir ./custom_prompts
+jwst-preprint-analyzer --year-month 2024-01 --output-dir ./analysis_results
 ```
 
 ### Single Paper Mode (by arXiv ID)
 Analyzes a single preprint specified by its arXiv ID.
 ```bash
-python jwst-preprint-doi-analyzer.py --arxiv-id XXXXX.YYYYY
+jwst-preprint-analyzer --arxiv-id XXXXX.YYYYY
 ```
 Example:
 ```bash
-python jwst-preprint-doi-analyzer.py --arxiv-id 2301.12345 --gpt-model gpt-4o
+jwst-preprint-analyzer --arxiv-id 2309.16028 --gpt-model gpt-4o
 ```
 
 ### Command-Line Options
 ```bash
-python jwst-preprint-doi-analyzer.py [-h] (--year-month YEAR_MONTH | --arxiv-id ARXIV_ID)
-                                    [--output-dir OUTPUT_DIR] [--prompts-dir PROMPTS_DIR]
-                                    [--science-threshold SCIENCE_THRESHOLD]
-                                    [--doi-threshold DOI_THRESHOLD]
-                                    [--reranker-threshold RERANKER_THRESHOLD]
-                                    [--reprocess] [--top-k-snippets TOP_K_SNIPPETS]
-                                    [--context-sentences CONTEXT_SENTENCES]
-                                    [--reranker-model RERANKER_MODEL]
-                                    [--gpt-model GPT_MODEL] [--validate-llm]
-                                    [--ads-key ADS_KEY] [--openai-key OPENAI_KEY]
-                                    [--cohere-key COHERE_KEY]
+jwst-preprint-analyzer [-h] (--year-month YEAR_MONTH | --arxiv-id ARXIV_ID)
+                      [--output-dir OUTPUT_DIR] [--prompts-dir PROMPTS_DIR]
+                      [--science-threshold SCIENCE_THRESHOLD]
+                      [--doi-threshold DOI_THRESHOLD]
+                      [--reranker-threshold RERANKER_THRESHOLD]
+                      [--reprocess] [--top-k-snippets TOP_K_SNIPPETS]
+                      [--context-sentences CONTEXT_SENTENCES]
+                      [--reranker-model RERANKER_MODEL]
+                      [--gpt-model GPT_MODEL] [--validate-llm]
+                      [--ads-key ADS_KEY] [--openai-key OPENAI_KEY]
+                      [--cohere-key COHERE_KEY]
 ```
 
 **Mode Selection (choose one):**
@@ -89,7 +102,7 @@ python jwst-preprint-doi-analyzer.py [-h] (--year-month YEAR_MONTH | --arxiv-id 
 -   `--top-k-snippets TOP_K_SNIPPETS`: Number of top reranked snippets to send to the LLM. Default: `5`.
 -   `--context-sentences CONTEXT_SENTENCES`: Number of sentences before and after a keyword sentence to include in a snippet. Default: `3`.
 -   `--reranker-model RERANKER_MODEL`: Cohere reranker model name. Default: `rerank-v3.5`.
--   `--gpt-model GPT_MODEL`: OpenAI GPT model for science and DOI analysis. Default: `gpt-4.1-mini-2025-04-14`.
+-   `--gpt-model GPT_MODEL`: OpenAI GPT model for science and DOI analysis. Default: `gpt-4o-mini-2024-07-18`.
 -   `--validate-llm`: Perform a second LLM call to validate the first analysis (increases cost/time).
 
 **API Key Options:**
@@ -97,6 +110,32 @@ python jwst-preprint-doi-analyzer.py [-h] (--year-month YEAR_MONTH | --arxiv-id 
 -   `--openai-key OPENAI_KEY`: OpenAI API key (optional if `OPENAI_API_KEY` environment variable is set).
 -   `--cohere-key COHERE_KEY`: Cohere API key (optional if `COHERE_API_KEY` environment variable is set; reranking skipped if missing).
 
+## Package Structure
+
+The analyzer is organized as a modular Python package:
+
+```
+jwst_preprint_analyzer/
+├── __init__.py              # Package initialization
+├── __main__.py              # CLI entry point
+├── analyzer.py              # Main orchestrator class
+├── models.py                # Pydantic data models
+├── reporting.py             # Report generation
+├── clients/                 # External API clients
+│   ├── ads.py              # ADS API client
+│   ├── openai.py           # OpenAI wrapper
+│   └── cohere.py           # Cohere reranker
+├── processing/              # Document processing
+│   ├── downloader.py       # PDF download
+│   ├── converter.py        # PDF to text conversion
+│   └── text_extractor.py   # Snippet extraction
+├── analysis/                # Core analysis logic
+│   ├── science.py          # JWST science analysis
+│   └── doi.py              # DOI analysis
+└── utils/                   # Utility functions
+    ├── cache.py            # Cache management
+    └── prompts.py          # Prompt loading
+```
 
 ## Analysis Workflow & Error Handling
 
@@ -150,7 +189,7 @@ The script creates and maintains the following directory structure within the sp
 └── prompts/                
     └── *.txt
 ```
-For single paper mode (`--arxiv-id`), output is directed to `stdout`, though `papers/` and `texts/` directories under `--output-dir` might still be used for intermediate files if not already cached and `--reprocess` isn't used. Cache files in `results/` are prefixed with the arXiv ID in single mode if caching were implemented for it (currently, single mode does not save to these monthly caches but uses `--reprocess` for re-download/conversion).
+For single paper mode (`--arxiv-id`), output is directed to `stdout`, though `papers/` and `texts/` directories under `--output-dir` might still be used for intermediate files if not already cached and `--reprocess` isn't used.
 
 ## Output Files and Format
 
@@ -166,7 +205,7 @@ The primary output for batch mode is the `YYYY-MM_report.json` file in the `resu
     "year_month_analyzed": "2024-01",
     "science_threshold": 0.5,
     "doi_threshold": 0.8,
-    "gpt_model": "gpt-4.1-mini-2025-04-14",
+    "gpt_model": "gpt-4o-mini-2024-07-18",
     "reranker_model": "rerank-v3.5",
     "top_k_snippets": 5,
     "context_sentences": 3,
@@ -193,7 +232,7 @@ The primary output for batch mode is the `YYYY-MM_report.json` file in the `resu
   "jwst_science_papers_details": [
     {
       "arxiv_id": "2401.00934",
-      "arxiv_url": "[https://arxiv.org/abs/2401.00934](https://arxiv.org/abs/2401.00934)",
+      "arxiv_url": "https://arxiv.org/abs/2401.00934",
       "science_score": 1.0,
       "science_reason": "Presents new JWST observations...",
       "science_quotes": ["quote1", "quote2"],
@@ -207,22 +246,6 @@ The primary output for batch mode is the `YYYY-MM_report.json` file in the `resu
 }
 ```
 
-**Other cache files (examples):**
-
-* **`YYYY-MM_science.json` / `YYYY-MM_dois.json`:**
-    ```json
-    {
-      "2401.00934": {
-        "jwstscience": 1.0, // or "jwstdoi"
-        "reason": "Justification for the score...",
-        "quotes": ["Supporting quote 1", "Supporting quote 2"]
-      }
-      // ... more papers
-    }
-    ```
-* **`YYYY-MM_snippets.json`:** Stores the reranked snippets that were sent to the LLM for each paper and analysis type (science/DOI).
-* **`YYYY-MM_skipped.json`:** Details papers skipped due to download, conversion, or critical analysis errors.
-
 ### Single Paper Mode (`--arxiv-id`)
 
 Output is a JSON object printed to standard output (`stdout`).
@@ -230,7 +253,7 @@ Output is a JSON object printed to standard output (`stdout`).
 ```json
 {
   "arxiv_id": "2301.12345",
-  "arxiv_url": "[https://arxiv.org/abs/2301.12345](https://arxiv.org/abs/2301.12345)",
+  "arxiv_url": "https://arxiv.org/abs/2301.12345",
   "processed_timestamp": "2024-05-07 19:00:00 UTC",
   "status": "Complete",
   "science_analysis": {
@@ -246,7 +269,6 @@ Output is a JSON object printed to standard output (`stdout`).
   "error_info": null
 }
 ```
-If an error occurs, `status` will reflect it, and `error_info` may contain details. If DOI analysis is skipped due to a low science score, `doi_analysis` will indicate this.
 
 ## Scoring System
 
@@ -274,5 +296,36 @@ In batch mode, the script caches results at various stages to avoid reprocessing
 -   Extracted and reranked snippets (`YYYY-MM_snippets.json`)
 
 Use the `--reprocess` flag to ignore these caches and force re-analysis of all papers in the batch.
-Single paper mode currently does not write to these monthly cache files but will reuse downloaded PDFs and converted text files from `papers/` and `texts/` subdirectories if they exist, unless `--reprocess` is specified.
+
+## Development
+
+### Running Tests
+```bash
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=jwst_preprint_analyzer
 ```
+
+### Code Formatting
+```bash
+# Format code with black
+black jwst_preprint_analyzer/
+
+# Check linting with ruff
+ruff check jwst_preprint_analyzer/
+```
+
+## Version History
+
+- **v1.0.0** (2025-06-05): Major refactoring from monolithic script to modular package
+  - Reorganized code into logical modules with single responsibilities
+  - Added proper packaging with pyproject.toml
+  - Improved error handling and added .env file support
+  - Fixed bug when running without Cohere API key
+
+- **v0.1.0**: Initial release as single script
