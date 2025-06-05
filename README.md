@@ -48,6 +48,37 @@ Create a `.env` file in the project root or set the following environment variab
 
 The package will automatically load variables from `.env` if it exists.
 
+## Testing
+
+This package includes comprehensive unit tests that don't require external API calls or downloads.
+
+### Running Tests
+
+```bash
+# Install test dependencies
+uv sync --dev  # or: pip install -e ".[dev]"
+
+# Run all tests
+uv run pytest tests/  # or: pytest tests/
+
+# Run tests with coverage
+uv run pytest tests/ --cov=jwst_preprint_analyzer --cov-report=term
+
+# Run tests with verbose output
+uv run pytest tests/ -v
+```
+
+### Test Structure
+
+- `tests/test_models.py` - Tests for Pydantic data models
+- `tests/test_cache.py` - Tests for JSON cache utilities
+- `tests/test_prompts.py` - Tests for prompt loading functionality
+- `tests/test_text_extractor.py` - Tests for text processing and snippet extraction
+
+### Continuous Integration
+
+The project includes GitHub Actions workflows that automatically run tests on Python 3.10, 3.11, and 3.12 for every push and pull request.
+
 ## Usage
 
 After installation, the `jwst-preprint-analyzer` command will be available.
@@ -322,7 +353,7 @@ ruff check jwst_preprint_analyzer/
 
 ## Version History
 
-- **v1.0.0** (2025-06-05): Major refactoring from monolithic script to modular package
+- **v0.2.0** (2025-06-05): Major refactoring from monolithic script to modular package
   - Reorganized code into logical modules with single responsibilities
   - Added proper packaging with pyproject.toml
   - Improved error handling and added .env file support
