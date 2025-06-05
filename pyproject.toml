@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jwst-preprint-analyzer"
-version = "1.0.0"
+version = "0.3.0"
 description = "Analyze arXiv preprints for JWST science content and DOI citations"
 readme = "README.md"
 authors = [
     {name = "STScI"},
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "openai>=1.0.0",
     "cohere>=5.0.0",
@@ -42,3 +42,9 @@ target-version = ['py38', 'py39', 'py310', 'py311']
 [tool.ruff]
 line-length = 100
 target-version = "py38"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "pytest-cov>=6.1.1",
+]
