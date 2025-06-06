@@ -84,7 +84,7 @@ def main():
     )
     parser.add_argument(
         "--gpt-model",
-        default="gpt-4o-mini-2024-07-18", 
+        default="gpt-4.1-mini-2025-04-14", 
         help="GPT scoring model for JWST science and DOIs"
     )
     parser.add_argument(

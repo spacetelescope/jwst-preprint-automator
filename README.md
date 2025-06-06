@@ -23,7 +23,7 @@ jwst-preprint-analyzer --arxiv-id XXXXX.YYYYY
 ```
 Example:
 ```bash
-jwst-preprint-analyzer --arxiv-id 2309.16028 --gpt-model gpt-4o
+jwst-preprint-analyzer --arxiv-id 2309.16028 --gpt-model gpt-4.1-mini-2025-04-14
 ```
 
 ### Command-Line Options
