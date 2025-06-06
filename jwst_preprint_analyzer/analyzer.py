@@ -49,7 +49,8 @@ class JWSTPreprintDOIAnalyzer:
                  top_k_snippets: int = 15,
                  context_sentences: int = 3,
                  validate_llm: bool = False,
-                 reprocess: bool = False):
+                 reprocess: bool = False,
+                 skip_doi: bool = False):
         """Initialize the JWST paper analyzer."""
         
         if not year_month and not arxiv_id:
@@ -70,6 +71,7 @@ class JWSTPreprintDOIAnalyzer:
         self.top_k_snippets = top_k_snippets
         self.context_sentences = context_sentences
         self.validate_llm = validate_llm
+        self.skip_doi = skip_doi
 
         # Setup API keys
         self.ads_key = ads_key or os.getenv('ADS_API_KEY')
@@ -146,13 +148,17 @@ class JWSTPreprintDOIAnalyzer:
         txt_path = self.texts_dir / f"{paper['arxiv_id']}.txt"
         pdf_path = self.papers_dir / f"{paper['arxiv_id']}.pdf"
 
-        if self.run_mode == "single":
-            return not self.reprocess and pdf_path.exists() and txt_path.exists()
+        # Check if files exist and are not empty
+        files_exist = pdf_path.exists() and txt_path.exists() and txt_path.stat().st_size > 0
 
+        # In single paper mode, we only need to check if files exist
+        if self.run_mode == "single":
+            return not self.reprocess and files_exist
+
+        # In batch mode, we also check the cache
         return (not self.reprocess
                 and paper['arxiv_id'] in downloaded_cache
-                and pdf_path.exists()
-                and txt_path.exists())
+                and files_exist)
 
     def _is_skipped(self, paper: Dict[str, str]) -> bool:
         """Check if paper was previously skipped."""
@@ -193,20 +199,22 @@ class JWSTPreprintDOIAnalyzer:
         
         # Download
         if not self.downloader.download_paper(arxiv_id, self.reprocess):
-            self._mark_as_skipped(paper, "Download failed", save_to_cache=(self.run_mode == "batch"))
+            self._mark_as_skipped(paper, "Download failed", save_to_cache=True)
             return False
             
         # Convert
         pdf_path = self.papers_dir / f"{arxiv_id}.pdf"
         if not self.converter.convert_to_text(arxiv_id, pdf_path, self.reprocess):
-            self._mark_as_skipped(paper, "PDF conversion failed", save_to_cache=(self.run_mode == "batch"))
+            self._mark_as_skipped(paper, "PDF conversion failed", save_to_cache=True)
             return False
             
-        # Update download cache
-        if self.run_mode == "batch":
-            downloaded = load_cache(self.cache_files['downloaded'])
-            downloaded[arxiv_id] = True
-            save_cache(self.cache_files['downloaded'], downloaded)
+        # Update download cache in both modes
+        downloaded = load_cache(self.cache_files['downloaded'])
+        downloaded[arxiv_id] = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "status": "success"
+        }
+        save_cache(self.cache_files['downloaded'], downloaded)
             
         return True
 
@@ -273,6 +281,11 @@ class JWSTPreprintDOIAnalyzer:
 
                 if current_science_score < self.science_threshold:
                     logger.info(f"Paper {arxiv_id} does not meet science threshold ({current_science_score:.2f} < {self.science_threshold}). Skipping DOI analysis.")
+                    continue
+
+                # Skip DOI analysis if flag is set
+                if self.skip_doi:
+                    logger.info(f"DOI analysis skipped for {arxiv_id} due to --skip-doi flag")
                     continue
 
                 # Analyze for DOIs
@@ -362,8 +375,8 @@ class JWSTPreprintDOIAnalyzer:
                 print(json.dumps(final_output, indent=2, ensure_ascii=False))
                 return
 
-            # Analyze DOI if science score meets threshold
-            if current_science_score >= self.science_threshold:
+            # Analyze DOI if science score meets threshold and not skipped
+            if current_science_score >= self.science_threshold and not self.skip_doi:
                 logger.info(f"Science score >= threshold. Analyzing DOI for {arxiv_id}")
                 doi_result = self.doi_analyzer.analyze(arxiv_id, txt_path)
                 final_output["doi_analysis"] = doi_result
@@ -374,9 +387,10 @@ class JWSTPreprintDOIAnalyzer:
                     logger.error(f"DOI analysis failed for {arxiv_id}. See results.")
                     final_output["status"] = "Complete (with DOI Analysis Error)"
             else:
-                logger.info(f"Science score below threshold. Skipping DOI analysis for {arxiv_id}.")
-                final_output["status"] = "Complete (DOI Skipped - Low Science Score)"
-                final_output["doi_analysis"] = {"jwstdoi": 0.0, "reason": "Skipped due to low science score", 
+                skip_reason = "Skipped due to --skip-doi flag" if self.skip_doi else "Skipped due to low science score"
+                logger.info(f"DOI analysis skipped for {arxiv_id}: {skip_reason}")
+                final_output["status"] = f"Complete (DOI Skipped - {skip_reason})"
+                final_output["doi_analysis"] = {"jwstdoi": 0.0, "reason": skip_reason, 
                                                "quotes": [], "error": None}
 
         except Exception as e:

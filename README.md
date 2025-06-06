@@ -37,7 +37,7 @@ jwst-preprint-analyzer [-h] (--year-month YEAR_MONTH | --arxiv-id ARXIV_ID)
                       [--context-sentences CONTEXT_SENTENCES]
                       [--reranker-model RERANKER_MODEL]
                       [--gpt-model GPT_MODEL] [--validate-llm]
-                      [--ads-key ADS_KEY] [--openai-key OPENAI_KEY]
+                      [--skip-doi] [--ads-key ADS_KEY] [--openai-key OPENAI_KEY]
                       [--cohere-key COHERE_KEY]
 ```
 
@@ -47,7 +47,11 @@ jwst-preprint-analyzer [-h] (--year-month YEAR_MONTH | --arxiv-id ARXIV_ID)
 
 **General Options:**
 -   `-h, --help`: Show this help message and exit.
--   `--output-dir OUTPUT_DIR, -o OUTPUT_DIR`: Directory to store all outputs (papers, texts, results). Default: current directory (`./`).
+-   `--output-dir OUTPUT_DIR, -o OUTPUT_DIR`: Project directory where the following subdirectories will be created:
+    - `papers/`: Downloaded PDF files
+    - `texts/`: Extracted text from PDFs
+    - `results/`: Analysis results and cache files
+    Default: current directory (`./`).
 -   `--prompts-dir PROMPTS_DIR, -p PROMPTS_DIR`: Directory containing LLM prompt template files (e.g., `science_system.txt`). Default: `./prompts`.
 -   `--science-threshold SCIENCE_THRESHOLD`: Threshold for classifying papers as JWST science (0-1). Default: `0.5`.
 -   `--doi-threshold DOI_THRESHOLD`: Threshold for considering DOIs as properly cited (0-1). Default: `0.8`.
@@ -58,6 +62,7 @@ jwst-preprint-analyzer [-h] (--year-month YEAR_MONTH | --arxiv-id ARXIV_ID)
 -   `--reranker-model RERANKER_MODEL`: Cohere reranker model name. Default: `rerank-v3.5`.
 -   `--gpt-model GPT_MODEL`: OpenAI GPT model for science and DOI analysis. Default: `gpt-4o-mini-2024-07-18`.
 -   `--validate-llm`: Perform a second LLM call to validate the first analysis (increases cost/time).
+-   `--skip-doi`: Skip DOI analysis completely, even for papers that meet the science threshold.
 
 **API Key Options:**
 -   `--ads-key ADS_KEY`: ADS API key (optional if `ADS_API_KEY` environment variable is set).

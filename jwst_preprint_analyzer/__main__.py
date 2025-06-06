@@ -34,7 +34,7 @@ def main():
         "--output-dir", "-o",
         type=Path,
         default=Path("./"),
-        help="Directory to store all outputs (papers, texts, results)"
+        help="Project directory where papers/, texts/, and results/ subdirectories will be created. Defaults to current directory."
     )
     parser.add_argument(
         "--prompts-dir", "-p",
@@ -92,6 +92,11 @@ def main():
         action="store_true",
         help="Perform a second LLM call to validate the first analysis (increases cost/time)"
     )
+    parser.add_argument(
+        "--skip-doi",
+        action="store_true",
+        help="Skip DOI analysis completely, even for papers that meet the science threshold"
+    )
     parser.add_argument("--ads-key", help="ADS API key (uses ADS_API_KEY env var if not provided)")
     parser.add_argument("--openai-key", help="OpenAI API key (uses OPENAI_API_KEY env var if not provided)")
     parser.add_argument("--cohere-key", help="Cohere API key (uses COHERE_API_KEY env var if not provided; reranking skipped if missing)")
@@ -136,6 +141,7 @@ def main():
             context_sentences=args.context_sentences,
             validate_llm=args.validate_llm,
             reprocess=args.reprocess,
+            skip_doi=args.skip_doi,
         )
 
         if analyzer.run_mode == "batch":
