@@ -1,1 +1,0 @@
-"""Test suite for jwst_preprint_analyzer package."""
