@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict
 
 import requests
+from ..utils.cache import load_cache, save_cache
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,8 @@ class PaperDownloader:
         logger.info(f"Checking download status for paper {arxiv_id}")
         
         pdf_path = self.papers_dir / f"{arxiv_id}.pdf"
+        
+        # Check if paper is already downloaded and not reprocessing
         if pdf_path.exists() and not reprocess:
             logger.info(f"Paper {arxiv_id} already downloaded.")
             return True

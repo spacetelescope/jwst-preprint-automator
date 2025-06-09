@@ -60,18 +60,53 @@ def read_golden_sample(excel_path: str) -> pd.DataFrame:
     """Read the golden sample Excel file."""
     return pd.read_excel(excel_path)
 
-def process_arxiv_id(arxiv_id: str, output_dir: str) -> Dict:
-    """Process a single arXiv ID using the command line tool."""
-    # Create the output directory structure
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
+def process_arxiv_id(arxiv_id: str, output_dir: str, reprocess: bool = False) -> Dict:
+    """
+    Process a single arXiv ID using the command line tool.
     
+    Args:
+        arxiv_id: The arXiv ID to process
+        output_dir: Project directory where papers/, texts/, and results/ subdirectories will be created
+        reprocess: If True, force reprocessing even if files exist
+    
+    Returns:
+        Dictionary containing the analysis results
+    """
+    # Setup paths
+    output_path = Path(output_dir)
+    papers_dir = output_path / "papers"
+    texts_dir = output_path / "texts"
+    results_dir = output_path / "results"
+    
+    # Create directories if they don't exist
+    for directory in [papers_dir, texts_dir, results_dir]:
+        directory.mkdir(parents=True, exist_ok=True)
+    
+    # Check for existing files
+    pdf_path = papers_dir / f"{arxiv_id}.pdf"
+    txt_path = texts_dir / f"{arxiv_id}.txt"
+    results_path = results_dir / f"{arxiv_id}_science.json"
+    
+    # If all files exist and we're not reprocessing, load and return existing results
+    if not reprocess and pdf_path.exists() and txt_path.exists() and results_path.exists():
+        print(f"Found existing files for {arxiv_id}, loading results...")
+        try:
+            with open(results_path, 'r') as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"Error reading existing results for {arxiv_id}: {e}", file=sys.stderr)
+            # Continue with reprocessing if results file is corrupted
+    
+    # Process the paper
     cmd = [
         "jwst-preprint-analyzer",
         "--arxiv-id", arxiv_id,
         "--output-dir", str(output_path),
-        "--doi-threshold", "0"  # Set DOI threshold to 0 to skip DOI validation
+        "--skip-doi"
     ]
+    
+    if reprocess:
+        cmd.append("--reprocess")
     
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -95,7 +130,7 @@ def main():
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
     golden_sample_path = project_root / "golden-sample" / "FlagshipGS-FinalReview.xlsx"
-    output_dir = project_root / "results_test-golden-sample"
+    output_dir = project_root 
     
     # Create output directory if it doesn't exist
     output_dir.mkdir(parents=True, exist_ok=True)
