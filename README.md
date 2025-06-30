@@ -16,6 +16,9 @@ Example:
 jwst-preprint-analyzer --year-month 2024-01 --output-dir ./analysis_results
 ```
 
+### Batch Mode with Pagination (by Month)
+The `--year-month` mode automatically handles large result sets by implementing arXiv ID pagination. When analyzing months with many papers, the system breaks queries into chunks (e.g., `arXiv:YYMM.0*`, `arXiv:YYMM.1*`) to stay under the ADS API 2000-row limit. This pagination is transparent to users and maintains full coverage of all papers for the specified month.
+
 ### Single Paper Mode (by arXiv ID)
 Analyzes a single preprint specified by its arXiv ID.
 ```bash
@@ -42,7 +45,7 @@ jwst-preprint-analyzer [-h] (--year-month YEAR_MONTH | --arxiv-id ARXIV_ID)
 ```
 
 **Mode Selection (choose one):**
--   `--year-month YEAR_MONTH`: Month to analyze in `YYYY-MM` format (e.g., `2024-01`) for batch processing.
+-   `--year-month YEAR_MONTH`: Month to analyze in `YYYY-MM` format (e.g., `2024-01`) for batch processing. Automatically implements arXiv ID pagination to handle large result sets and overcome ADS API 2000-row limit.
 -   `--arxiv-id ARXIV_ID`: Specific arXiv ID (e.g., `2301.12345`) to process for single paper analysis.
 
 **General Options:**
