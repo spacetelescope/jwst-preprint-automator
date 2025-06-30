@@ -41,8 +41,10 @@ class ADSClient:
             logger.info(f"Found {len(papers_for_digit)} papers for pattern {arxiv_pattern}")
             all_papers.extend(papers_for_digit)
 
-        logger.info(f"Found total of {len(all_papers)} valid papers for {year_month}")
-        return all_papers
+        # Sort by arXiv ID for consistent ordering
+        sorted_papers = sorted(all_papers, key=lambda x: x['arxiv_id'])
+        logger.info(f"Found total of {len(sorted_papers)} papers for {year_month}")
+        return sorted_papers
 
     def _query_papers_by_pattern(self, arxiv_pattern: str, context: str) -> List[Dict[str, str]]:
         """Query ADS for papers matching a specific arXiv pattern."""
