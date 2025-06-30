@@ -35,7 +35,7 @@ class JWSTPreprintDOIAnalyzer:
     
     def __init__(self,
                  output_dir: Path,
-                 year_month: Optional[str] = None, 
+                 year_month: Optional[str] = None,
                  arxiv_id: Optional[str] = None, 
                  prompts_dir: Path = Path("./prompts"),
                  science_threshold: float = 0.5,
@@ -53,10 +53,10 @@ class JWSTPreprintDOIAnalyzer:
                  skip_doi: bool = False):
         """Initialize the JWST paper analyzer."""
         
-        if not year_month and not arxiv_id:
-            raise ValueError("Either 'year_month' or 'arxiv_id' must be provided.")
-        if year_month and arxiv_id:
-            raise ValueError("Provide either 'year_month' or 'arxiv_id', not both.")
+        # Validate that exactly one mode is provided
+        modes_provided = sum([bool(year_month), bool(arxiv_id)])
+        if modes_provided != 1:
+            raise ValueError("Exactly one of 'year_month' or 'arxiv_id' must be provided.")
 
         self.year_month = year_month
         self.single_arxiv_id = arxiv_id
@@ -115,7 +115,11 @@ class JWSTPreprintDOIAnalyzer:
         )
         
         # Setup cache files
-        cache_prefix = self.year_month if self.run_mode == "batch" else self.single_arxiv_id if self.single_arxiv_id else "single_run"
+        if self.year_month:
+            cache_prefix = self.year_month
+        else:
+            cache_prefix = self.single_arxiv_id if self.single_arxiv_id else "single_run"
+            
         self.cache_files = {
             'downloaded': self.results_dir / f"{cache_prefix}_downloaded.json",
             'science': self.results_dir / f"{cache_prefix}_science.json",
@@ -225,14 +229,15 @@ class JWSTPreprintDOIAnalyzer:
             return
 
         start_time = time.time()
-        logger.info(f"Starting analysis for {self.year_month}...")
+        batch_identifier = self.year_month
+        logger.info(f"Starting analysis for {batch_identifier}...")
 
         try:
-            # Get paper list from ADS
+            # Get paper list from ADS with pagination
             papers = self.ads_client.get_papers_for_month(self.year_month)
             if not papers:
                 logger.warning("No papers found or ADS query failed. Exiting.")
-                self.report_generator.generate_report(self.year_month, self.cache_files)
+                self.report_generator.generate_report(batch_identifier, self.cache_files)
                 return
 
             # Process each paper
@@ -310,16 +315,16 @@ class JWSTPreprintDOIAnalyzer:
                             save_cache(self.cache_files['doi'], doi_cache)
 
             # Generate final summary report
-            self.report_generator.generate_report(self.year_month, self.cache_files)
+            self.report_generator.generate_report(batch_identifier, self.cache_files)
 
             end_time = time.time()
-            logger.info(f"Analysis complete for {self.year_month} in {end_time - start_time:.2f} seconds.")
+            logger.info(f"Analysis complete for {batch_identifier} in {end_time - start_time:.2f} seconds.")
 
         except Exception as e:
             logger.exception(f"An unhandled error occurred during the run: {e}")
             try:
                 logger.info("Attempting to generate partial report after error...")
-                self.report_generator.generate_report(self.year_month, self.cache_files)
+                self.report_generator.generate_report(batch_identifier, self.cache_files)
             except Exception as report_err:
                 logger.error(f"Failed to generate partial report: {report_err}")
             raise
