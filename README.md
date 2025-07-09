@@ -1,56 +1,76 @@
-# JWST Preprint DOI Analyzer
+# JWST Preprint Automation
 
-Automatically analyzes astronomy preprints from arXiv to identify papers containing James Webb Space Telescope (JWST) science results and checks for proper JWST data DOI citations from MAST. Supports both batch processing (by month) and single paper analysis.
+This script classifies whether papers are JWST science papers. Optionally, it can also check for proper JWST DOI citations from MAST.
 
-## Usage
+## Quick start
+There are two main ways to use this JWST Preprint Automation package:
 
-After installation, the `jwst-preprint-analyzer` command will be available.
+**Batch mode**: `jwst-preprint-analyzer --year-month YYYY-MM`. For example:
 
-### Batch Mode (by Month)
-Analyzes all astronomy preprints for a given month and year.
 ```bash
-jwst-preprint-analyzer --year-month YYYY-MM
-```
-Example:
-```bash
-jwst-preprint-analyzer --year-month 2024-01 --output-dir ./analysis_results
+jwst-preprint-analyzer --year-month 2025-05
 ```
 
-### Batch Mode with Pagination (by Month)
-The `--year-month` mode automatically handles large result sets by implementing arXiv ID pagination. When analyzing months with many papers, the system breaks queries into chunks (e.g., `arXiv:YYMM.0*`, `arXiv:YYMM.1*`) to stay under the ADS API 2000-row limit. This pagination is transparent to users and maintains full coverage of all papers for the specified month.
+**Individual mode**: `jwst-preprint-analyzer --arxiv-id YYMM.NNNNN`. For example:
 
-### Single Paper Mode (by arXiv ID)
-Analyzes a single preprint specified by its arXiv ID.
 ```bash
-jwst-preprint-analyzer --arxiv-id XXXXX.YYYYY
-```
-Example:
-```bash
-jwst-preprint-analyzer --arxiv-id 2309.16028 --gpt-model gpt-4.1-mini-2025-04-14
+jwst-preprint-analyzer --arxiv-id 2309.16028
 ```
 
-### Command-Line Options
+## Installation
+
+We recommend using version Python 3.10 or higher, and using a virtual environment. This has so far only been tested on macOS and Linux.
+
+To install from the source, first copy the repository to your computer
 ```bash
-jwst-preprint-analyzer [-h] (--year-month YEAR_MONTH | --arxiv-id ARXIV_ID)
-                      [--output-dir OUTPUT_DIR] [--prompts-dir PROMPTS_DIR]
-                      [--science-threshold SCIENCE_THRESHOLD]
-                      [--doi-threshold DOI_THRESHOLD]
-                      [--reranker-threshold RERANKER_THRESHOLD]
-                      [--reprocess] [--top-k-snippets TOP_K_SNIPPETS]
-                      [--context-sentences CONTEXT_SENTENCES]
-                      [--reranker-model RERANKER_MODEL]
-                      [--gpt-model GPT_MODEL] [--validate-llm]
-                      [--skip-doi] [--ads-key ADS_KEY] [--openai-key OPENAI_KEY]
-                      [--cohere-key COHERE_KEY]
+git clone git@github.com:spacetelescope/jwst-preprint-automator.git
+
+cd jwst-preprint-automator
 ```
 
-**Mode Selection (choose one):**
--   `--year-month YEAR_MONTH`: Month to analyze in `YYYY-MM` format (e.g., `2024-01`) for batch processing. Automatically implements arXiv ID pagination to handle large result sets and overcome ADS API 2000-row limit.
--   `--arxiv-id ARXIV_ID`: Specific arXiv ID (e.g., `2301.12345`) to process for single paper analysis.
+Then, create a virtual environment. An easy way to do this is using `uv`:
+```bash
+uv venv && source .venv/bin/activate
+uv sync
+```
 
-**General Options:**
+Alternatively, you could install with python's built in venv and pip:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate 
+# on Windows, instead do 
+# .venv\Scripts\activate
+
+pip install -e . # install in editable mode
+```
+
+### Environment Variables
+Next, you must set a few API keys, which enable the use of LLMs and querying ADS. Create a `.env` file in the project root with the following contents:
+```bash
+export OPENAI_API_KEY=your_openai_key_here  # Required for all classification use cases
+export COHERE_API_KEY=your_cohere_key_here  # Required for snippet reranking
+export ADS_API_KEY=your_ads_key_here        # Required for batch mode
+```
+
+
+## Additional usage patterns
+
+The are many more options that you can view using `jwst-preprint-analyzer -h`. Here is a brief menu of possibilities:
+
+```bash
+# do not try to classify DOIs
+jwst-preprint-analyzer --arxiv-id 2501.00089 --skip-doi
+
+# specify the LLM
+jwst-preprint-analyzer --arxiv-id 2503.18791 --gpt-model gpt-4.1-mini-2025-04-14
+
+# reprocess the script and save in different directory
+jwst-preprint-analyzer --arxiv-id 2503.18791 --reprocess --output-dir ./results-reprocessed
+```
+
+**Detail options:**
 -   `-h, --help`: Show this help message and exit.
--   `--output-dir OUTPUT_DIR, -o OUTPUT_DIR`: Project directory where the following subdirectories will be created:
+-   `--output-dir OUTPUT_DIR, -o OUTPUT_DIR`: Project directory wherein the following subdirectories will be created:
     - `papers/`: Downloaded PDF files
     - `texts/`: Extracted text from PDFs
     - `results/`: Analysis results and cache files
@@ -67,48 +87,13 @@ jwst-preprint-analyzer [-h] (--year-month YEAR_MONTH | --arxiv-id ARXIV_ID)
 -   `--validate-llm`: Perform a second LLM call to validate the first analysis (increases cost/time).
 -   `--skip-doi`: Skip DOI analysis completely, even for papers that meet the science threshold.
 
-**API Key Options:**
+**API keys:**
 -   `--ads-key ADS_KEY`: ADS API key (optional if `ADS_API_KEY` environment variable is set).
 -   `--openai-key OPENAI_KEY`: OpenAI API key (optional if `OPENAI_API_KEY` environment variable is set).
 -   `--cohere-key COHERE_KEY`: Cohere API key (optional if `COHERE_API_KEY` environment variable is set; reranking skipped if missing).
 
-## Installation
 
-### Prerequisites  
-- Python 3.10 or higher
-- Virtual environment (recommended)
-
-### Install from Source
-```bash
-# Clone the repository
-git clone <repository-url>
-cd jwst-preprint-doi-automator
-
-# Create virtual environment and install
-uv venv && source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv sync  # or: pip install -e .
-```
-
-### Environment Variables
-Create a `.env` file in the project root:
-```bash
-ADS_API_KEY=your_ads_key_here        # Required for batch mode
-OPENAI_API_KEY=your_openai_key_here  # Required
-COHERE_API_KEY=your_cohere_key_here  # Optional (enables snippet reranking)
-```
-
-## Testing
-
-```bash
-# Install test dependencies and run tests
-uv sync --dev
-uv run pytest tests/
-
-# Run with coverage
-uv run pytest tests/ --cov=jwst_preprint_analyzer --cov-report=term
-```
-
-## Output
+## Outputs
 
 ### Batch Mode
 Generates a summary report at `results/YYYY-MM_report.json` with:
@@ -119,13 +104,3 @@ Generates a summary report at `results/YYYY-MM_report.json` with:
 ### Single Paper Mode  
 Outputs JSON to stdout with science/DOI analysis results for the specified arXiv paper.
 
-## Development
-
-### Code Formatting
-```bash
-# Format code  
-uv run black jwst_preprint_analyzer/
-
-# Check linting
-uv run ruff check jwst_preprint_analyzer/
-```
