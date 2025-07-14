@@ -1,6 +1,6 @@
 # JWST Preprint Automation
 
-This script classifies whether papers are JWST science papers. Optionally, it can also check for proper JWST DOI citations from MAST. The tool uses GPT-4.1-nano for improved text snippet reranking to identify the most relevant content before final classification.
+This script classifies whether papers are JWST science papers. Optionally, it can also check for proper JWST DOI citations from MAST.
 
 ## Quick start
 There are two main ways to use this JWST Preprint Automation package:
@@ -48,7 +48,7 @@ pip install -e . # install in editable mode
 Next, you must set a few API keys, which enable the use of LLMs and querying ADS. Create a `.env` file in the project root with the following contents:
 ```bash
 export OPENAI_API_KEY=your_openai_key_here  # Required for all classification use cases
-export COHERE_API_KEY=your_cohere_key_here  # Optional: for legacy reranking (GPT reranker used by default)
+export COHERE_API_KEY=your_cohere_key_here  # Optional - now only used for legacy reranking (GPT reranker used by default)
 export ADS_API_KEY=your_ads_key_here        # Required for batch mode
 ```
 
