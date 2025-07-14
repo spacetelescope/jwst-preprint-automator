@@ -18,6 +18,7 @@ except ImportError:
 from .clients.ads import ADSClient
 from .clients.openai import OpenAIClient
 from .clients.cohere import CohereClient
+from .clients.gpt_reranker import GPTReranker
 from .processing.downloader import PaperDownloader
 from .processing.converter import PDFConverter
 from .processing.text_extractor import TextExtractor
@@ -50,7 +51,8 @@ class JWSTPreprintDOIAnalyzer:
                  context_sentences: int = 3,
                  validate_llm: bool = False,
                  reprocess: bool = False,
-                 skip_doi: bool = False):
+                 skip_doi: bool = False,
+                 use_gpt_reranker: bool = True):
         """Initialize the JWST paper analyzer."""
         
         # Validate that exactly one mode is provided
@@ -72,6 +74,7 @@ class JWSTPreprintDOIAnalyzer:
         self.context_sentences = context_sentences
         self.validate_llm = validate_llm
         self.skip_doi = skip_doi
+        self.use_gpt_reranker = use_gpt_reranker
 
         # Setup API keys
         self.ads_key = ads_key or os.getenv('ADS_API_KEY')
@@ -87,6 +90,7 @@ class JWSTPreprintDOIAnalyzer:
         self.ads_client = ADSClient(self.ads_key) if self.ads_key else None
         self.openai_client = OpenAIClient(self.openai_key, self.gpt_model)
         self.cohere_client = CohereClient(self.cohere_key, self.reranker_model)
+        self.gpt_reranker = GPTReranker(self.openai_client, 'gpt-4.1-nano') if self.use_gpt_reranker else None
         
         # Create directories
         self.output_dir = output_dir 
@@ -107,11 +111,13 @@ class JWSTPreprintDOIAnalyzer:
         # Initialize analyzers
         self.science_analyzer = ScienceAnalyzer(
             self.openai_client, self.cohere_client, self.text_extractor,
-            self.prompts, self.top_k_snippets, self.reranker_threshold, self.validate_llm
+            self.prompts, self.top_k_snippets, self.reranker_threshold, self.validate_llm,
+            self.gpt_reranker
         )
         self.doi_analyzer = DOIAnalyzer(
             self.openai_client, self.cohere_client, self.text_extractor,
-            self.prompts, self.top_k_snippets, self.validate_llm
+            self.prompts, self.top_k_snippets, self.validate_llm,
+            self.gpt_reranker
         )
         
         # Setup cache files

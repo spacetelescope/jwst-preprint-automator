@@ -1,6 +1,6 @@
 # JWST Preprint Automation
 
-This script classifies whether papers are JWST science papers. Optionally, it can also check for proper JWST DOI citations from MAST.
+This script classifies whether papers are JWST science papers. Optionally, it can also check for proper JWST DOI citations from MAST. The tool uses GPT-4.1-nano for improved text snippet reranking to identify the most relevant content before final classification.
 
 ## Quick start
 There are two main ways to use this JWST Preprint Automation package:
@@ -48,7 +48,7 @@ pip install -e . # install in editable mode
 Next, you must set a few API keys, which enable the use of LLMs and querying ADS. Create a `.env` file in the project root with the following contents:
 ```bash
 export OPENAI_API_KEY=your_openai_key_here  # Required for all classification use cases
-export COHERE_API_KEY=your_cohere_key_here  # Required for snippet reranking
+export COHERE_API_KEY=your_cohere_key_here  # Optional: for legacy reranking (GPT reranker used by default)
 export ADS_API_KEY=your_ads_key_here        # Required for batch mode
 ```
 
@@ -66,6 +66,9 @@ jwst-preprint-analyzer --arxiv-id 2503.18791 --gpt-model gpt-4.1-mini-2025-04-14
 
 # reprocess the script and save in different directory
 jwst-preprint-analyzer --arxiv-id 2503.18791 --reprocess --output-dir ./results-reprocessed
+
+# use the legacy Cohere reranker instead of GPT
+jwst-preprint-analyzer --arxiv-id 2503.18791 --no-gpt-reranker
 ```
 
 **Detail options:**
@@ -82,15 +85,16 @@ jwst-preprint-analyzer --arxiv-id 2503.18791 --reprocess --output-dir ./results-
 -   `--reprocess`: Force reprocessing of downloaded/analyzed papers, ignoring caches.
 -   `--top-k-snippets TOP_K_SNIPPETS`: Number of top reranked snippets to send to the LLM. Default: `5`.
 -   `--context-sentences CONTEXT_SENTENCES`: Number of sentences before and after a keyword sentence to include in a snippet. Default: `3`.
--   `--reranker-model RERANKER_MODEL`: Cohere reranker model name. Default: `rerank-v3.5`.
+-   `--reranker-model RERANKER_MODEL`: Cohere reranker model name (when using legacy reranking). Default: `rerank-v3.5`.
 -   `--gpt-model GPT_MODEL`: OpenAI GPT model for science and DOI analysis. Default: `gpt-4o-mini-2024-07-18`.
 -   `--validate-llm`: Perform a second LLM call to validate the first analysis (increases cost/time).
 -   `--skip-doi`: Skip DOI analysis completely, even for papers that meet the science threshold.
+-   `--no-gpt-reranker`: Use the legacy Cohere reranker instead of the default GPT-4.1-nano reranker.
 
 **API keys:**
 -   `--ads-key ADS_KEY`: ADS API key (optional if `ADS_API_KEY` environment variable is set).
 -   `--openai-key OPENAI_KEY`: OpenAI API key (optional if `OPENAI_API_KEY` environment variable is set).
--   `--cohere-key COHERE_KEY`: Cohere API key (optional if `COHERE_API_KEY` environment variable is set; reranking skipped if missing).
+-   `--cohere-key COHERE_KEY`: Cohere API key (optional if `COHERE_API_KEY` environment variable is set; only needed for legacy reranking).
 
 
 ## Outputs

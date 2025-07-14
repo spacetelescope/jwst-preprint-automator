@@ -2,11 +2,12 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from ..models import JWSTDOILabelerModel
 from ..clients.openai import OpenAIClient
 from ..clients.cohere import CohereClient
+from ..clients.gpt_reranker import GPTReranker
 from ..processing.text_extractor import TextExtractor
 from .science import ScienceAnalyzer
 
@@ -33,9 +34,11 @@ class DOIAnalyzer:
                  text_extractor: TextExtractor,
                  prompts: Dict[str, str],
                  top_k_snippets: int = 15,
-                 validate_llm: bool = False):
+                 validate_llm: bool = False,
+                 gpt_reranker: Optional[GPTReranker] = None):
         self.openai_client = openai_client
         self.cohere_client = cohere_client
+        self.gpt_reranker = gpt_reranker
         self.text_extractor = text_extractor
         self.prompts = prompts
         self.top_k_snippets = top_k_snippets
@@ -79,9 +82,15 @@ class DOIAnalyzer:
             return {"jwstdoi": -1.0, "reason": "Analysis failed: Missing rerank DOI query prompt", 
                    "quotes": [], "error": "prompt_missing"}
                    
-        reranked_data = self.cohere_client.rerank_snippets(
-            rerank_query, all_snippets, self.top_k_snippets
-        )
+        # Use GPT reranker if available, otherwise fall back to Cohere
+        if self.gpt_reranker:
+            reranked_data = self.gpt_reranker.rerank_snippets(
+                rerank_query, all_snippets, self.top_k_snippets
+            )
+        else:
+            reranked_data = self.cohere_client.rerank_snippets(
+                rerank_query, all_snippets, self.top_k_snippets
+            )
 
         if not reranked_data:
             logger.warning(f"Reranking produced no snippets for DOI analysis {arxiv_id}. Skipping LLM.")
