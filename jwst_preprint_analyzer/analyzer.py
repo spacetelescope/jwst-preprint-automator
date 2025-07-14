@@ -18,6 +18,7 @@ except ImportError:
 from .clients.ads import ADSClient
 from .clients.openai import OpenAIClient
 from .clients.cohere import CohereClient
+from .clients.gpt_reranker import GPTReranker
 from .processing.downloader import PaperDownloader
 from .processing.converter import PDFConverter
 from .processing.text_extractor import TextExtractor
@@ -44,13 +45,14 @@ class JWSTPreprintDOIAnalyzer:
                  ads_key: Optional[str] = None,
                  openai_key: Optional[str] = None,
                  cohere_key: Optional[str] = None,
-                 gpt_model: str = 'gpt-4o-mini-2024-07-18',
-                 reranker_model: str = 'rerank-v3.5', 
+                 gpt_model: str = 'gpt-4.1-mini-2025-04-14',
+                 cohere_reranker_model: str = 'rerank-v3.5', 
                  top_k_snippets: int = 15,
                  context_sentences: int = 3,
                  validate_llm: bool = False,
                  reprocess: bool = False,
-                 skip_doi: bool = False):
+                 skip_doi: bool = False,
+                 use_gpt_reranker: bool = True):
         """Initialize the JWST paper analyzer."""
         
         # Validate that exactly one mode is provided
@@ -67,11 +69,12 @@ class JWSTPreprintDOIAnalyzer:
         self.doi_threshold = doi_threshold
         self.reranker_threshold = reranker_threshold
         self.gpt_model = gpt_model
-        self.reranker_model = reranker_model 
+        self.cohere_reranker_model = cohere_reranker_model 
         self.top_k_snippets = top_k_snippets
         self.context_sentences = context_sentences
         self.validate_llm = validate_llm
         self.skip_doi = skip_doi
+        self.use_gpt_reranker = use_gpt_reranker
 
         # Setup API keys
         self.ads_key = ads_key or os.getenv('ADS_API_KEY')
@@ -86,7 +89,8 @@ class JWSTPreprintDOIAnalyzer:
         # Initialize clients
         self.ads_client = ADSClient(self.ads_key) if self.ads_key else None
         self.openai_client = OpenAIClient(self.openai_key, self.gpt_model)
-        self.cohere_client = CohereClient(self.cohere_key, self.reranker_model)
+        self.cohere_client = CohereClient(self.cohere_key, self.cohere_reranker_model)
+        self.gpt_reranker = GPTReranker(self.openai_client, 'gpt-4.1-nano-2025-04-14') if self.use_gpt_reranker else None
         
         # Create directories
         self.output_dir = output_dir 
@@ -107,11 +111,13 @@ class JWSTPreprintDOIAnalyzer:
         # Initialize analyzers
         self.science_analyzer = ScienceAnalyzer(
             self.openai_client, self.cohere_client, self.text_extractor,
-            self.prompts, self.top_k_snippets, self.reranker_threshold, self.validate_llm
+            self.prompts, self.top_k_snippets, self.reranker_threshold, self.validate_llm,
+            self.gpt_reranker
         )
         self.doi_analyzer = DOIAnalyzer(
             self.openai_client, self.cohere_client, self.text_extractor,
-            self.prompts, self.top_k_snippets, self.validate_llm
+            self.prompts, self.top_k_snippets, self.validate_llm,
+            self.gpt_reranker
         )
         
         # Setup cache files
@@ -131,7 +137,8 @@ class JWSTPreprintDOIAnalyzer:
         # Initialize report generator
         model_config = {
             "gpt_model": self.gpt_model,
-            "reranker_model": self.reranker_model if self.cohere_client.client else "N/A (Cohere unavailable)",
+            "reranker_type": "GPT-4.1-nano-2025-04-14" if self.use_gpt_reranker else "Cohere",
+            "cohere_reranker_model": self.cohere_reranker_model if self.cohere_client.client else "N/A (Cohere unavailable)",
             "top_k_snippets": self.top_k_snippets,
             "context_sentences": self.context_sentences,
             "llm_validation_enabled": self.validate_llm,

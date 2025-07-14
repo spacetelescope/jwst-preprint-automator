@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jwst-preprint-analyzer"
-version = "0.3.2"
+version = "0.4.0"
 description = "Analyze arXiv preprints for JWST science content and DOI citations"
 readme = "README.md"
 authors = [
@@ -19,7 +19,9 @@ dependencies = [
     "requests>=2.28.0",
     "pdftext>=0.6.0",
     "python-dotenv>=0.19.0",
-    "numpy>=2.2.6",
+    "numpy>=1.23.5,<2.3.0",
+    "pandas>=2.3.1",
+    "openpyxl>=3.1.5",
 ]
 
 [project.optional-dependencies]
