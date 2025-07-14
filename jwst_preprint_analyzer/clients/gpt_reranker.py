@@ -8,31 +8,20 @@ from .openai import OpenAIClient
 
 logger = logging.getLogger(__name__)
 
+# YES_TOKEN_ID = 9642  # "Yes" token in `cl100k_base`
+# NO_TOKEN_ID = 2822   # "No" token in `cl100k_base`
+
+YES_TOKEN_ID = 13022 # "Yes" token in `o200k_base` 
+NO_TOKEN_ID = 3160   # "No" token in `o200k_base`  
 
 class GPTReranker:
     """GPT-4.1-nano based reranker using logit bias and log probabilities."""
     
-    def __init__(self, openai_client: OpenAIClient, model: str = 'gpt-4.1-nano'):
+    def __init__(self, openai_client: OpenAIClient, model: str = 'gpt-4.1-nano-2025-04-14'):
         self.openai_client = openai_client
         self.model = model
-        self.yes_token_id = None
-        self.no_token_id = None
-        self._initialize_token_ids()
-    
-    def _initialize_token_ids(self):
-        """Initialize token IDs for 'Yes' and 'No' responses."""
-        try:
-            # Get token IDs for "Yes" and "No" using tokenizer
-            # Note: These are approximate token IDs - in production, you'd want to
-            # use the actual tokenizer to get precise IDs
-            self.yes_token_id = 9642  # Common token ID for "Yes"
-            self.no_token_id = 2822   # Common token ID for "No"
-            logger.debug(f"Initialized token IDs: Yes={self.yes_token_id}, No={self.no_token_id}")
-        except Exception as e:
-            logger.error(f"Failed to initialize token IDs: {e}")
-            # Fallback: use common token IDs
-            self.yes_token_id = 9642
-            self.no_token_id = 2822
+        self.yes_token_id = YES_TOKEN_ID
+        self.no_token_id = NO_TOKEN_ID
     
     def _create_reranking_prompt(self, query: str, snippet: str) -> List[Dict[str, str]]:
         """Create a prompt for yes/no reranking."""
@@ -99,20 +88,18 @@ Is this text snippet relevant to the query? Answer only 'Yes' or 'No'."""
                 
                 # Set up logit bias to constrain to Yes/No
                 logit_bias = {}
-                if self.yes_token_id and self.no_token_id:
-                    # Bias towards Yes/No tokens and against others
-                    logit_bias[self.yes_token_id] = 0
-                    logit_bias[self.no_token_id] = 0
-                    # You could add negative bias for other common tokens
+                # Bias towards Yes/No tokens and against others
+                logit_bias[self.yes_token_id] = 0
+                logit_bias[self.no_token_id] = 0
                 
                 # Make API call with logit bias and log probabilities
                 response = self.openai_client.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
                     max_tokens=1,
-                    temperature=0,
+                    temperature=0.4,
                     logprobs=True,
-                    top_logprobs=5,
+                    top_logprobs=2,
                     logit_bias=logit_bias if logit_bias else None
                 )
                 

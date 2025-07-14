@@ -85,8 +85,8 @@ jwst-preprint-analyzer --arxiv-id 2503.18791 --no-gpt-reranker
 -   `--reprocess`: Force reprocessing of downloaded/analyzed papers, ignoring caches.
 -   `--top-k-snippets TOP_K_SNIPPETS`: Number of top reranked snippets to send to the LLM. Default: `5`.
 -   `--context-sentences CONTEXT_SENTENCES`: Number of sentences before and after a keyword sentence to include in a snippet. Default: `3`.
--   `--reranker-model RERANKER_MODEL`: Cohere reranker model name (when using legacy reranking). Default: `rerank-v3.5`.
--   `--gpt-model GPT_MODEL`: OpenAI GPT model for science and DOI analysis. Default: `gpt-4o-mini-2024-07-18`.
+-   `--cohere-reranker-model COHERE_RERANKER_MODEL`: Cohere reranker model name (when using legacy reranking). Default: `rerank-v3.5`.
+-   `--gpt-model GPT_MODEL`: OpenAI GPT model for science and DOI analysis. Default: `gpt-4.1-mini-2025-04-14`.
 -   `--validate-llm`: Perform a second LLM call to validate the first analysis (increases cost/time).
 -   `--skip-doi`: Skip DOI analysis completely, even for papers that meet the science threshold.
 -   `--no-gpt-reranker`: Use the legacy Cohere reranker instead of the default GPT-4.1-nano reranker.

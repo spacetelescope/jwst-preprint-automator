@@ -78,9 +78,9 @@ def main():
         help="Number of sentences before and after a keyword sentence to include in a snippet"
     )
     parser.add_argument(
-        "--reranker-model",
+        "--cohere-reranker-model",
         default="rerank-v3.5", 
-        help="Cohere reranker model name"
+        help="Cohere reranker model name (when using legacy reranking)"
     )
     parser.add_argument(
         "--gpt-model",
@@ -96,6 +96,11 @@ def main():
         "--skip-doi",
         action="store_true",
         help="Skip DOI analysis completely, even for papers that meet the science threshold"
+    )
+    parser.add_argument(
+        "--no-gpt-reranker",
+        action="store_true",
+        help="Use the legacy Cohere reranker instead of the default GPT-4.1-nano reranker"
     )
     parser.add_argument("--ads-key", help="ADS API key (uses ADS_API_KEY env var if not provided)")
     parser.add_argument("--openai-key", help="OpenAI API key (uses OPENAI_API_KEY env var if not provided)")
@@ -136,12 +141,13 @@ def main():
             openai_key=args.openai_key,
             cohere_key=args.cohere_key,
             gpt_model=args.gpt_model,
-            reranker_model=args.reranker_model,
+            cohere_reranker_model=args.cohere_reranker_model,
             top_k_snippets=args.top_k_snippets,
             context_sentences=args.context_sentences,
             validate_llm=args.validate_llm,
             reprocess=args.reprocess,
             skip_doi=args.skip_doi,
+            use_gpt_reranker=not args.no_gpt_reranker,
         )
 
         if analyzer.run_mode == "batch":
