@@ -1,5 +1,6 @@
 """Report generation functionality."""
 
+import csv
 import json
 import logging
 import time
@@ -24,7 +25,7 @@ class ReportGenerator:
         self.doi_threshold = doi_threshold
         self.model_config = model_config
         
-    def generate_report(self, year_month: str, cache_files: Dict[str, Path]) -> Optional[Dict]:
+    def generate_report(self, year_month: str, cache_files: Dict[str, Path], limit_papers: Optional[int] = None) -> Optional[Dict]:
         """Generate a summary report of the analysis."""
         science_results = load_cache(cache_files['science'])
         doi_results = load_cache(cache_files['doi'])
@@ -84,14 +85,19 @@ class ReportGenerator:
                 "has_valid_doi": has_valid_doi 
             })
 
+        metadata = {
+            "report_generated": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+            "year_month_analyzed": year_month,
+            "science_threshold": self.science_threshold,
+            "doi_threshold": self.doi_threshold,
+            **self.model_config
+        }
+        
+        if limit_papers is not None:
+            metadata["limit_papers"] = limit_papers
+        
         report = {
-            "metadata": {
-                "report_generated": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
-                "year_month_analyzed": year_month,
-                "science_threshold": self.science_threshold,
-                "doi_threshold": self.doi_threshold,
-                **self.model_config
-            },
+            "metadata": metadata,
             "summary": {
                 "total_papers_identified_from_ads": total_attempted,
                 "papers_downloaded_and_converted": len(downloaded_papers), 
@@ -106,7 +112,11 @@ class ReportGenerator:
             "jwst_science_papers_details": sorted(detailed_results_list, key=lambda x: x['arxiv_id'])
         }
 
-        report_path = self.results_dir / f"{year_month}_report.json"
+        json_filename = f"{year_month}_report"
+        if limit_papers is not None:
+            json_filename += f"_limit{limit_papers}"
+        json_filename += ".json"
+        report_path = self.results_dir / json_filename
         try:
             with open(report_path, 'w', encoding='utf-8') as f:
                 json.dump(report, f, indent=2, ensure_ascii=False)
@@ -127,3 +137,116 @@ class ReportGenerator:
         logger.info("--- End Summary ---")
 
         return report
+
+    def generate_csv_report(self, year_month: str, cache_files: Dict[str, Path], limit_papers: Optional[int] = None) -> Optional[Path]:
+        """Generate a CSV report with ALL papers and their processing status."""
+        science_results = load_cache(cache_files['science'])
+        doi_results = load_cache(cache_files['doi'])
+        skipped_results = load_cache(cache_files['skipped'])
+        downloaded_papers = load_cache(cache_files['downloaded'])
+        papers_cache = load_cache(cache_files['papers'])
+        
+        # Create CSV data for ALL papers in the papers cache
+        csv_data = []
+        
+        for arxiv_id, paper_info in papers_cache.items():
+            # Start with basic paper info
+            row = {
+                "arxiv_id": arxiv_id,
+                "arxiv_url": paper_info.get("arxiv_url", f"https://arxiv.org/abs/{arxiv_id}"),
+                "paper_title": paper_info.get("title", ""),
+                "bibcode": paper_info.get("bibcode", ""),
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                "top_quotes": "",
+                "jwstscience": 0.0,
+                "reason": "",
+                "status": ""
+            }
+            
+            # Check if paper was skipped before analysis
+            if arxiv_id in skipped_results:
+                skip_info = skipped_results[arxiv_id]
+                row.update({
+                    "status": skip_info.get("reason", ""),
+                    "timestamp": skip_info.get("timestamp", ""),
+                    "reason": "Skipped before analysis"
+                })
+            
+            # Check if paper was downloaded but analysis failed
+            elif arxiv_id in downloaded_papers and arxiv_id not in science_results:
+                row.update({
+                    "status": "Analysis failed - no science result",
+                    "reason": "Analysis failed"
+                })
+            
+            # Check if paper had science analysis
+            elif arxiv_id in science_results:
+                science_info = science_results[arxiv_id]
+                
+                if isinstance(science_info, dict):
+                    # Handle quotes formatting
+                    quotes = science_info.get("quotes", [])
+                    if isinstance(quotes, list):
+                        quotes_str = "|".join(quotes)  # Join with pipe separator
+                    else:
+                        quotes_str = str(quotes)
+                    
+                    row.update({
+                        "jwstscience": science_info.get("jwstscience", 0.0),
+                        "reason": science_info.get("reason", ""),
+                        "top_quotes": quotes_str
+                    })
+                    
+                    # Determine status based on science analysis
+                    jwst_score = science_info.get("jwstscience", 0.0)
+                    science_reason = science_info.get("reason", "")
+                    
+                    if jwst_score < 0:
+                        row["status"] = "Science analysis failed"
+                    elif "No relevant keywords" in science_reason:
+                        row["status"] = "No JWST keywords found"
+                    elif "reranker score" in science_reason:
+                        row["status"] = "Below reranker threshold"
+                    elif jwst_score < self.science_threshold:
+                        row["status"] = "Below science threshold"
+                    else:
+                        row["status"] = "JWST science paper"
+                    # If jwst_score >= threshold, it's a successful JWST science paper
+                else:
+                    row.update({
+                        "status": "Invalid science analysis result",
+                        "reason": "Analysis failed"
+                    })
+            
+            # Paper wasn't processed at all
+            else:
+                row.update({
+                    "status": "Not processed",
+                    "reason": "Paper not processed"
+                })
+            
+            csv_data.append(row)
+        
+        # Sort by arxiv_id
+        csv_data.sort(key=lambda x: x['arxiv_id'])
+        
+        # Write CSV file
+        csv_filename = f"{year_month}_report"
+        if limit_papers is not None:
+            csv_filename += f"_limit{limit_papers}"
+        csv_filename += ".csv"
+        csv_path = self.results_dir / csv_filename
+        try:
+            with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+                fieldnames = ["arxiv_id", "arxiv_url", "paper_title", "top_quotes", 
+                            "jwstscience", "reason", "timestamp", "bibcode", "status"]
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(csv_data)
+                
+            logger.info(f"CSV report generated: {csv_path}")
+            return csv_path
+            
+        except Exception as e:
+            logger.error(f"Failed to save CSV report file {csv_path}: {e}")
+            return None

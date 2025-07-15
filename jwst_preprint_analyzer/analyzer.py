@@ -52,7 +52,8 @@ class JWSTPreprintDOIAnalyzer:
                  validate_llm: bool = False,
                  reprocess: bool = False,
                  skip_doi: bool = False,
-                 use_gpt_reranker: bool = True):
+                 use_gpt_reranker: bool = True,
+                 limit_papers: Optional[int] = None):
         """Initialize the JWST paper analyzer."""
         
         # Validate that exactly one mode is provided
@@ -75,6 +76,7 @@ class JWSTPreprintDOIAnalyzer:
         self.validate_llm = validate_llm
         self.skip_doi = skip_doi
         self.use_gpt_reranker = use_gpt_reranker
+        self.limit_papers = limit_papers
 
         # Setup API keys
         self.ads_key = ads_key or os.getenv('ADS_API_KEY')
@@ -131,7 +133,8 @@ class JWSTPreprintDOIAnalyzer:
             'science': self.results_dir / f"{cache_prefix}_science.json",
             'doi': self.results_dir / f"{cache_prefix}_dois.json",
             'skipped': self.results_dir / f"{cache_prefix}_skipped.json",
-            'snippets': self.results_dir / f"{cache_prefix}_snippets.json"
+            'snippets': self.results_dir / f"{cache_prefix}_snippets.json",
+            'papers': self.results_dir / f"{cache_prefix}_papers.json"
         }
         
         # Initialize report generator
@@ -244,8 +247,27 @@ class JWSTPreprintDOIAnalyzer:
             papers = self.ads_client.get_papers_for_month(self.year_month)
             if not papers:
                 logger.warning("No papers found or ADS query failed. Exiting.")
-                self.report_generator.generate_report(batch_identifier, self.cache_files)
+                self.report_generator.generate_report(batch_identifier, self.cache_files, self.limit_papers)
                 return
+                
+            # Apply limit if specified
+            if self.limit_papers is not None:
+                original_count = len(papers)
+                papers = papers[:self.limit_papers]
+                logger.info(f"Limiting processing to first {len(papers)} papers out of {original_count} total papers")
+            
+            # Store paper metadata in cache
+            papers_cache = load_cache(self.cache_files['papers'])
+            for paper in papers:
+                arxiv_id = paper['arxiv_id']
+                if arxiv_id not in papers_cache:
+                    papers_cache[arxiv_id] = {
+                        'arxiv_id': arxiv_id,
+                        'title': paper.get('title', ''),
+                        'bibcode': paper.get('bibcode', ''),
+                        'arxiv_url': f"https://arxiv.org/abs/{arxiv_id}"
+                    }
+            save_cache(self.cache_files['papers'], papers_cache)
 
             # Process each paper
             for i, paper in enumerate(papers):
@@ -322,7 +344,10 @@ class JWSTPreprintDOIAnalyzer:
                             save_cache(self.cache_files['doi'], doi_cache)
 
             # Generate final summary report
-            self.report_generator.generate_report(batch_identifier, self.cache_files)
+            self.report_generator.generate_report(batch_identifier, self.cache_files, self.limit_papers)
+            
+            # Generate CSV report
+            self.report_generator.generate_csv_report(batch_identifier, self.cache_files, self.limit_papers)
 
             end_time = time.time()
             logger.info(f"Analysis complete for {batch_identifier} in {end_time - start_time:.2f} seconds.")

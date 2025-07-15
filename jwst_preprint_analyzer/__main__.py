@@ -102,6 +102,11 @@ def main():
         action="store_true",
         help="Use the legacy Cohere reranker instead of the default GPT-4.1-nano reranker"
     )
+    parser.add_argument(
+        "--limit-papers",
+        type=int,
+        help="Limit processing to the first N papers (useful for testing). Only applies to batch mode."
+    )
     parser.add_argument("--ads-key", help="ADS API key (uses ADS_API_KEY env var if not provided)")
     parser.add_argument("--openai-key", help="OpenAI API key (uses OPENAI_API_KEY env var if not provided)")
     parser.add_argument("--cohere-key", help="Cohere API key (uses COHERE_API_KEY env var if not provided; reranking skipped if missing)")
@@ -113,6 +118,10 @@ def main():
         parser.error("Science threshold must be between 0 and 1")
     if not 0 <= args.doi_threshold <= 1:
         parser.error("DOI threshold must be between 0 and 1")
+    
+    # Validate limit-papers
+    if args.limit_papers is not None and args.limit_papers < 1:
+        parser.error("--limit-papers must be a positive integer")
 
     # Validate formats
     if args.year_month and not re.match(r"^\d{4}-\d{2}$", args.year_month):
@@ -148,6 +157,7 @@ def main():
             reprocess=args.reprocess,
             skip_doi=args.skip_doi,
             use_gpt_reranker=not args.no_gpt_reranker,
+            limit_papers=args.limit_papers,
         )
 
         if analyzer.run_mode == "batch":
