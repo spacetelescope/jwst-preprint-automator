@@ -251,7 +251,7 @@ class ReportGenerator:
                 fieldnames = ["arxiv_id", "arxiv_url", "paper_title", "entry_date", "pubdate",
                             "top_quotes", "jwst_sciencescore", "jwst_sciencereason",
                             "jwst_doiscore", "jwst_doireason", "timestamp", "bibcode", "jwst_classification"]
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames, quoting=csv.QUOTE_NONNUMERIC, doublequote=False, escapechar='\\')
                 writer.writeheader()
                 writer.writerows(csv_data)
                 
