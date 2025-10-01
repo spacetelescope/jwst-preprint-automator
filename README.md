@@ -1,6 +1,6 @@
 # JWST Preprint Automation
 
-This script classifies whether papers are JWST science papers. Optionally, it can also check for proper JWST DOI citations from MAST.
+This script classifies whether papers are JWST science papers and checks for proper JWST DOI citations from MAST.
 
 ## Quick start
 There are two main ways to use this JWST Preprint Automation package:
@@ -44,6 +44,8 @@ source .venv/bin/activate
 pip install -e . # install in editable mode
 ```
 
+The package will automatically download the required NLTK `punkt` tokenizer data on first use.
+
 ### Environment Variables
 Next, you must set a few API keys, which enable the use of LLMs and querying ADS. Create a `.env` file in the project root with the following contents:
 ```bash
@@ -58,7 +60,7 @@ export ADS_API_KEY=your_ads_key_here        # Required for batch mode
 The are many more options that you can view using `jwst-preprint-analyzer -h`. Here is a brief menu of possibilities:
 
 ```bash
-# do not try to classify DOIs
+# skip DOI analysis
 jwst-preprint-analyzer --arxiv-id 2501.00089 --skip-doi
 
 # specify the LLM
@@ -88,7 +90,7 @@ jwst-preprint-analyzer --arxiv-id 2503.18791 --no-gpt-reranker
 -   `--cohere-reranker-model COHERE_RERANKER_MODEL`: Cohere reranker model name (when using legacy reranking). Default: `rerank-v3.5`.
 -   `--gpt-model GPT_MODEL`: OpenAI GPT model for science and DOI analysis. Default: `gpt-4.1-mini-2025-04-14`.
 -   `--validate-llm`: Perform a second LLM call to validate the first analysis (increases cost/time).
--   `--skip-doi`: Skip DOI analysis completely, even for papers that meet the science threshold.
+-   `--skip-doi`: Skip DOI analysis for papers that meet the science threshold.
 -   `--no-gpt-reranker`: Use the legacy Cohere reranker instead of the default GPT-4.1-nano reranker.
 
 **API keys:**
@@ -100,11 +102,8 @@ jwst-preprint-analyzer --arxiv-id 2503.18791 --no-gpt-reranker
 ## Outputs
 
 ### Batch Mode
-Generates a summary report at `results/YYYY-MM_report.json` with:
-- Paper counts and analysis results
-- Details on JWST science papers found
-- DOI citation compliance status
+Batch mode generates two reports in the `results/` directory. The JSON report (`YYYY-MM_report.json`) contains paper counts, analysis results, details on JWST science papers found, and DOI citation compliance status. The CSV report (`YYYY-MM_report.csv`) contains one row per paper with the following columns: `arxiv_id`, `arxiv_url`, `paper_title`, `bibcode`, `entry_date`, `pubdate`, `jwst_sciencescore`, `jwst_sciencereason`, `jwst_doiscore`, `jwst_doireason`, `jwst_classification`, `top_quotes`, and `timestamp`.
 
-### Single Paper Mode  
-Outputs JSON to stdout with science/DOI analysis results for the specified arXiv paper.
+### Single Paper Mode
+Single paper mode outputs JSON to stdout with science and DOI analysis results for the specified arXiv paper. The JSON includes the same fields as the CSV columns above.
 

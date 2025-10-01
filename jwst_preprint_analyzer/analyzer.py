@@ -265,7 +265,9 @@ class JWSTPreprintDOIAnalyzer:
                         'arxiv_id': arxiv_id,
                         'title': paper.get('title', ''),
                         'bibcode': paper.get('bibcode', ''),
-                        'arxiv_url': f"https://arxiv.org/abs/{arxiv_id}"
+                        'arxiv_url': f"https://arxiv.org/abs/{arxiv_id}",
+                        'pubdate': paper.get('pubdate', ''),
+                        'entry_date': paper.get('entry_date', '')
                     }
             save_cache(self.cache_files['papers'], papers_cache)
 
@@ -361,6 +363,24 @@ class JWSTPreprintDOIAnalyzer:
                 logger.error(f"Failed to generate partial report: {report_err}")
             raise
 
+    def _transform_analysis_keys(self, analysis_result: Dict) -> Dict:
+        """Transform internal analysis keys to user-facing keys."""
+        if not analysis_result or not isinstance(analysis_result, dict):
+            return analysis_result
+
+        transformed = {}
+        key_mapping = {
+            'jwstscience': 'jwst_sciencescore',
+            'jwstdoi': 'jwst_doiscore',
+            'reason': 'jwst_sciencereason' if 'jwstscience' in analysis_result else 'jwst_doireason'
+        }
+
+        for key, value in analysis_result.items():
+            new_key = key_mapping.get(key, key)
+            transformed[new_key] = value
+
+        return transformed
+
     def process_single_paper(self, arxiv_id: str):
         """Processes a single paper by arXiv ID and prints results to stdout."""
         start_time = time.time()
@@ -369,18 +389,18 @@ class JWSTPreprintDOIAnalyzer:
         # Basic validation
         if not re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", arxiv_id.split('/')[-1]):
             logger.error(f"Invalid arXiv ID format provided: {arxiv_id}")
-            print(json.dumps({"error": "invalid_arxiv_id", "arxiv_id": arxiv_id, 
+            print(json.dumps({"error": "invalid_arxiv_id", "arxiv_id": arxiv_id,
                             "message": "Invalid arXiv ID format."}, indent=2))
             return
 
         # Create a dummy paper dictionary
-        paper = {'arxiv_id': arxiv_id, 'bibcode': 'N/A'} 
+        paper = {'arxiv_id': arxiv_id, 'bibcode': 'N/A'}
 
         final_output = {
             "arxiv_id": arxiv_id,
             "arxiv_url": f"https://arxiv.org/abs/{arxiv_id}",
             "processed_timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
-            "status": "Started",
+            "jwst_classification": "Started",
             "science_analysis": None,
             "doi_analysis": None,
             "error_info": None
@@ -390,7 +410,7 @@ class JWSTPreprintDOIAnalyzer:
             # Download and convert
             if not self._process_paper(paper):
                 logger.error(f"Failed to download/convert {arxiv_id}.")
-                final_output["status"] = "Error: Download/Conversion Failed"
+                final_output["jwst_classification"] = "Error: Download/Conversion Failed"
                 final_output["error_info"] = "Could not retrieve or convert PDF from arXiv."
                 print(json.dumps(final_output, indent=2, ensure_ascii=False))
                 return
@@ -399,16 +419,17 @@ class JWSTPreprintDOIAnalyzer:
             txt_path = self.texts_dir / f"{arxiv_id}.txt"
             logger.info(f"Analyzing science content for single paper {arxiv_id}")
             science_result = self.science_analyzer.analyze(arxiv_id, txt_path)
-            final_output["science_analysis"] = science_result 
+            final_output["science_analysis"] = self._transform_analysis_keys(science_result)
 
             current_science_score = -1.0
             if science_result and isinstance(science_result, dict) and "error" not in science_result:
                 current_science_score = science_result.get("jwstscience", -1.0)
-                final_output["status"] = "Science Analysis Complete" 
+                final_output["jwst_classification"] = "Science Analysis Complete"
             else:
                 logger.error(f"Science analysis failed for {arxiv_id}. See results.")
-                final_output["status"] = "Error: Science Analysis Failed"
-                final_output["error_info"] = science_result.get("reason", "Science analysis failed") if science_result else "Science analysis failed"
+                final_output["jwst_classification"] = "Error: Science Analysis Failed"
+                transformed_result = self._transform_analysis_keys(science_result) if science_result else {}
+                final_output["error_info"] = transformed_result.get("jwst_sciencereason", "Science analysis failed")
                 print(json.dumps(final_output, indent=2, ensure_ascii=False))
                 return
 
@@ -416,23 +437,23 @@ class JWSTPreprintDOIAnalyzer:
             if current_science_score >= self.science_threshold and not self.skip_doi:
                 logger.info(f"Science score >= threshold. Analyzing DOI for {arxiv_id}")
                 doi_result = self.doi_analyzer.analyze(arxiv_id, txt_path)
-                final_output["doi_analysis"] = doi_result
+                final_output["doi_analysis"] = self._transform_analysis_keys(doi_result)
 
                 if doi_result and isinstance(doi_result, dict) and "error" not in doi_result:
-                    final_output["status"] = "Complete"
+                    final_output["jwst_classification"] = "Complete"
                 else:
                     logger.error(f"DOI analysis failed for {arxiv_id}. See results.")
-                    final_output["status"] = "Complete (with DOI Analysis Error)"
+                    final_output["jwst_classification"] = "Complete (with DOI Analysis Error)"
             else:
                 skip_reason = "Skipped due to --skip-doi flag" if self.skip_doi else "Skipped due to low science score"
                 logger.info(f"DOI analysis skipped for {arxiv_id}: {skip_reason}")
-                final_output["status"] = f"Complete (DOI Skipped - {skip_reason})"
-                final_output["doi_analysis"] = {"jwstdoi": 0.0, "reason": skip_reason, 
+                final_output["jwst_classification"] = f"Complete (DOI Skipped - {skip_reason})"
+                final_output["doi_analysis"] = {"jwst_doiscore": 0.0, "jwst_doireason": skip_reason,
                                                "quotes": [], "error": None}
 
         except Exception as e:
             logger.exception(f"Unhandled error during single paper processing for {arxiv_id}: {e}")
-            final_output["status"] = "Error: Unhandled Exception"
+            final_output["jwst_classification"] = "Error: Unhandled Exception"
             final_output["error_info"] = f"Unexpected error: {str(e)}"
 
         try:

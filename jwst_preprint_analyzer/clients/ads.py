@@ -51,7 +51,7 @@ class ADSClient:
         params = {
             "q": "database:astronomy",
             "fq": [f'identifier:"{arxiv_pattern}"'],
-            "fl": ["identifier", "bibcode", "title"],
+            "fl": ["identifier", "bibcode", "title", "pubdate", "entry_date"],
             "rows": 2000,
             "sort": "bibcode asc"
         }
@@ -98,7 +98,9 @@ class ADSClient:
                     papers.append({
                         'arxiv_id': arxiv_id,
                         'bibcode': doc['bibcode'],
-                        'title': doc.get('title', [''])[0] if doc.get('title') else ''
+                        'title': doc.get('title', [''])[0] if doc.get('title') else '',
+                        'pubdate': doc.get('pubdate', ''),
+                        'entry_date': doc.get('entry_date', '')
                     })
             elif arxiv_id:
                 logger.warning(f"Extracted potential arXiv ID '{arxiv_id}' has unexpected format. Skipping.")

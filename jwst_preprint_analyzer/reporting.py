@@ -156,73 +156,83 @@ class ReportGenerator:
                 "arxiv_url": paper_info.get("arxiv_url", f"https://arxiv.org/abs/{arxiv_id}"),
                 "paper_title": paper_info.get("title", ""),
                 "bibcode": paper_info.get("bibcode", ""),
+                "entry_date": paper_info.get("entry_date", ""),
+                "pubdate": paper_info.get("pubdate", ""),
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
                 "top_quotes": "",
-                "jwstscience": 0.0,
-                "reason": "",
-                "status": ""
+                "jwst_sciencescore": 0.0,
+                "jwst_sciencereason": "",
+                "jwst_doiscore": 0.0,
+                "jwst_doireason": "",
+                "jwst_classification": ""
             }
             
             # Check if paper was skipped before analysis
             if arxiv_id in skipped_results:
                 skip_info = skipped_results[arxiv_id]
                 row.update({
-                    "status": skip_info.get("reason", ""),
+                    "jwst_classification": skip_info.get("reason", ""),
                     "timestamp": skip_info.get("timestamp", ""),
-                    "reason": "Skipped before analysis"
+                    "jwst_sciencereason": "Skipped before analysis"
                 })
             
             # Check if paper was downloaded but analysis failed
             elif arxiv_id in downloaded_papers and arxiv_id not in science_results:
                 row.update({
-                    "status": "Analysis failed - no science result",
-                    "reason": "Analysis failed"
+                    "jwst_classification": "Analysis failed - no science result",
+                    "jwst_sciencereason": "Analysis failed"
                 })
             
             # Check if paper had science analysis
             elif arxiv_id in science_results:
                 science_info = science_results[arxiv_id]
-                
+
                 if isinstance(science_info, dict):
                     # Handle quotes formatting
                     quotes = science_info.get("quotes", [])
                     if isinstance(quotes, list):
-                        quotes_str = "|".join(quotes)  # Join with pipe separator
+                        quotes_str = "|".join(quotes)
                     else:
                         quotes_str = str(quotes)
-                    
+
                     row.update({
-                        "jwstscience": science_info.get("jwstscience", 0.0),
-                        "reason": science_info.get("reason", ""),
+                        "jwst_sciencescore": science_info.get("jwstscience", 0.0),
+                        "jwst_sciencereason": science_info.get("reason", ""),
                         "top_quotes": quotes_str
                     })
-                    
+
                     # Determine status based on science analysis
                     jwst_score = science_info.get("jwstscience", 0.0)
                     science_reason = science_info.get("reason", "")
-                    
+
                     if jwst_score < 0:
-                        row["status"] = "Science analysis failed"
+                        row["jwst_classification"] = "Science analysis failed"
                     elif "No relevant keywords" in science_reason:
-                        row["status"] = "No JWST keywords found"
+                        row["jwst_classification"] = "No JWST keywords found"
                     elif "reranker score" in science_reason:
-                        row["status"] = "Below reranker threshold"
+                        row["jwst_classification"] = "Below reranker threshold"
                     elif jwst_score < self.science_threshold:
-                        row["status"] = "Below science threshold"
+                        row["jwst_classification"] = "Below science threshold"
                     else:
-                        row["status"] = "JWST science paper"
-                    # If jwst_score >= threshold, it's a successful JWST science paper
+                        row["jwst_classification"] = "JWST science paper"
+
+                    # Add DOI information if available
+                    if arxiv_id in doi_results:
+                        doi_info = doi_results[arxiv_id]
+                        if isinstance(doi_info, dict):
+                            row["jwst_doiscore"] = doi_info.get("jwstdoi", 0.0)
+                            row["jwst_doireason"] = doi_info.get("reason", "")
                 else:
                     row.update({
-                        "status": "Invalid science analysis result",
-                        "reason": "Analysis failed"
+                        "jwst_classification": "Invalid science analysis result",
+                        "jwst_sciencereason": "Analysis failed"
                     })
             
             # Paper wasn't processed at all
             else:
                 row.update({
-                    "status": "Not processed",
-                    "reason": "Paper not processed"
+                    "jwst_classification": "Not processed",
+                    "jwst_sciencereason": "Paper not processed"
                 })
             
             csv_data.append(row)
@@ -238,8 +248,9 @@ class ReportGenerator:
         csv_path = self.results_dir / csv_filename
         try:
             with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-                fieldnames = ["arxiv_id", "arxiv_url", "paper_title", "top_quotes", 
-                            "jwstscience", "reason", "timestamp", "bibcode", "status"]
+                fieldnames = ["arxiv_id", "arxiv_url", "paper_title", "entry_date", "pubdate",
+                            "top_quotes", "jwst_sciencescore", "jwst_sciencereason",
+                            "jwst_doiscore", "jwst_doireason", "timestamp", "bibcode", "jwst_classification"]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(csv_data)
