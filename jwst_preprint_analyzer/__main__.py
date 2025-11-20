@@ -22,8 +22,9 @@ def main():
     )
     mode_group = parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument(
-        "--year-month", 
-        help="Month to analyze in YYYY-MM format (e.g., 2024-01) for batch processing."
+        "--lookback-days",
+        type=int,
+        help="Number of days to look back for recent papers (default: 1 for batch processing)."
     )
     mode_group.add_argument(
         "--arxiv-id", 
@@ -119,13 +120,15 @@ def main():
     if not 0 <= args.doi_threshold <= 1:
         parser.error("DOI threshold must be between 0 and 1")
     
+    
     # Validate limit-papers
     if args.limit_papers is not None and args.limit_papers < 1:
         parser.error("--limit-papers must be a positive integer")
-
-    # Validate formats
-    if args.year_month and not re.match(r"^\d{4}-\d{2}$", args.year_month):
-        parser.error("year_month format must be YYYY-MM")
+    
+    # Validate lookback-days
+    if args.lookback_days is not None and args.lookback_days < 1:
+        parser.error("--lookback-days must be a positive integer")
+    
     if args.arxiv_id and not re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", args.arxiv_id.split('/')[-1]):
         parser.error("Invalid arXiv ID format. Should be like XXXX.YYYYY or XXXX.YYYYYvN")
 
@@ -139,7 +142,7 @@ def main():
 
     try:
         analyzer = JWSTPreprintDOIAnalyzer(
-            year_month=args.year_month,
+            lookback_days=args.lookback_days,
             arxiv_id=args.arxiv_id,
             output_dir=args.output_dir,
             prompts_dir=args.prompts_dir, 

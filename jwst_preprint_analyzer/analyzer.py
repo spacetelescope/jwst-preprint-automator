@@ -36,7 +36,7 @@ class JWSTPreprintDOIAnalyzer:
     
     def __init__(self,
                  output_dir: Path,
-                 year_month: Optional[str] = None,
+                 lookback_days: Optional[int] = None,
                  arxiv_id: Optional[str] = None, 
                  prompts_dir: Path = Path("./prompts"),
                  science_threshold: float = 0.5,
@@ -57,13 +57,13 @@ class JWSTPreprintDOIAnalyzer:
         """Initialize the JWST paper analyzer."""
         
         # Validate that exactly one mode is provided
-        modes_provided = sum([bool(year_month), bool(arxiv_id)])
+        modes_provided = sum([bool(lookback_days is not None), bool(arxiv_id)])
         if modes_provided != 1:
-            raise ValueError("Exactly one of 'year_month' or 'arxiv_id' must be provided.")
+            raise ValueError("Exactly one of 'lookback_days' or 'arxiv_id' must be provided.")
 
-        self.year_month = year_month
+        self.lookback_days = lookback_days
         self.single_arxiv_id = arxiv_id
-        self.run_mode = "batch" if year_month else "single"
+        self.run_mode = "batch" if lookback_days is not None else "single"
         
         self.reprocess = reprocess
         self.science_threshold = science_threshold
@@ -84,7 +84,7 @@ class JWSTPreprintDOIAnalyzer:
         self.cohere_key = cohere_key or os.getenv('COHERE_API_KEY')
         
         if self.run_mode == "batch" and not self.ads_key:
-            logger.warning("ADS_API_KEY not provided. Batch mode ('year_month') will fail.")
+            logger.warning("ADS_API_KEY not provided. Batch mode ('lookback_days') will fail.")
         if not self.openai_key:
             raise ValueError("OPENAI_API_KEY must be provided (as argument or environment variable)")
 
@@ -123,8 +123,10 @@ class JWSTPreprintDOIAnalyzer:
         )
         
         # Setup cache files
-        if self.year_month:
-            cache_prefix = self.year_month
+        if self.lookback_days is not None:
+            # Use date-based prefix for batch mode
+            from datetime import datetime
+            cache_prefix = datetime.now().strftime('%Y-%m-%d')
         else:
             cache_prefix = self.single_arxiv_id if self.single_arxiv_id else "single_run"
             
@@ -239,12 +241,13 @@ class JWSTPreprintDOIAnalyzer:
             return
 
         start_time = time.time()
-        batch_identifier = self.year_month
-        logger.info(f"Starting analysis for {batch_identifier}...")
+        from datetime import datetime
+        batch_identifier = datetime.now().strftime('%Y-%m-%d')
+        logger.info(f"Starting analysis for {batch_identifier} (lookback: {self.lookback_days} days)...")
 
         try:
             # Get paper list from ADS with pagination
-            papers = self.ads_client.get_papers_for_month(self.year_month)
+            papers = self.ads_client.get_recent_papers(self.lookback_days)
             if not papers:
                 logger.warning("No papers found or ADS query failed. Exiting.")
                 self.report_generator.generate_report(batch_identifier, self.cache_files, self.limit_papers)
@@ -256,19 +259,13 @@ class JWSTPreprintDOIAnalyzer:
                 papers = papers[:self.limit_papers]
                 logger.info(f"Limiting processing to first {len(papers)} papers out of {original_count} total papers")
             
-            # Store paper metadata in cache
+            # Store paper metadata in cache (with ALL ADS fields)
             papers_cache = load_cache(self.cache_files['papers'])
             for paper in papers:
                 arxiv_id = paper['arxiv_id']
                 if arxiv_id not in papers_cache:
-                    papers_cache[arxiv_id] = {
-                        'arxiv_id': arxiv_id,
-                        'title': paper.get('title', ''),
-                        'bibcode': paper.get('bibcode', ''),
-                        'arxiv_url': f"https://arxiv.org/abs/{arxiv_id}",
-                        'pubdate': paper.get('pubdate', ''),
-                        'entry_date': paper.get('entry_date', '')
-                    }
+                    # Store all ADS fields for this paper
+                    papers_cache[arxiv_id] = paper
             save_cache(self.cache_files['papers'], papers_cache)
 
             # Process each paper

@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
 import requests
@@ -16,94 +17,142 @@ class ADSClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://api.adsabs.harvard.edu/v1/search/query"
+    
+    def _calculate_date_range(self, lookback_days: int) -> Dict[str, str]:
+        """Calculate date range for ADS query based on lookback days.
         
-    def get_papers_for_month(self, year_month: str) -> List[Dict[str, str]]:
-        """Fetch list of astronomy papers for the specified month from ADS using pagination."""
-        logger.info(f"Fetching paper list for {year_month} with arXiv ID pagination")
-
-        try:
-            year_full, month = year_month.split('-')
-            if len(year_full) != 4 or not year_full.isdigit() or len(month) != 2 or not month.isdigit():
-                raise ValueError("Invalid format")
-            year_short = year_full[2:]  # Get the last two digits of the year (YY)
-        except ValueError:
-            logger.error("`year_month` argument format must be YYYY-MM")
-            raise ValueError("`year_month` argument format must be YYYY-MM")
-
-        all_papers = []
-        
-        # Paginate using first digit of paper number: 0*, 1*, 2*, ..., 9*
-        for digit in range(10):
-            arxiv_pattern = f"arXiv:{year_short}{month}.{digit}*"
-            logger.info(f"Querying papers with pattern: {arxiv_pattern}")
+        Args:
+            lookback_days: Number of days to look back from today
             
-            papers_for_digit = self._query_papers_by_pattern(arxiv_pattern, year_month)
-            logger.info(f"Found {len(papers_for_digit)} papers for pattern {arxiv_pattern}")
-            all_papers.extend(papers_for_digit)
-
-        # Sort by arXiv ID for consistent ordering
-        sorted_papers = sorted(all_papers, key=lambda x: x['arxiv_id'])
-        logger.info(f"Found total of {len(sorted_papers)} papers for {year_month}")
-        return sorted_papers
-
-    def _query_papers_by_pattern(self, arxiv_pattern: str, context: str) -> List[Dict[str, str]]:
-        """Query ADS for papers matching a specific arXiv pattern."""
-        params = {
-            "q": "database:astronomy",
-            "fq": [f'identifier:"{arxiv_pattern}"'],
-            "fl": ["identifier", "bibcode", "title", "pubdate", "entry_date"],
-            "rows": 2000,
-            "sort": "bibcode asc"
+        Returns:
+            Dictionary with formatted date strings for the query
+        """
+        today = datetime.now()
+        start_date = today - timedelta(days=lookback_days)
+        
+        return {
+            'entdate_start': start_date.strftime('%Y-%m-%d'),
+            'entdate_end': today.strftime('%Y-%m-%d'),
+            'year_start': today.year - 1,
+            'year_end': today.year,
+            'fulltext_mtime_start': '1000-01-01T00:00:00.000Z'
         }
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-
-        try:
-            response = requests.get(self.base_url, params=params, headers=headers, timeout=30)
-            response.raise_for_status()
-        except requests.exceptions.Timeout:
-            logger.error(f"ADS API request timed out for pattern {arxiv_pattern}")
-            return []
-        except requests.exceptions.RequestException as e:
-            logger.error(f"ADS API request failed for pattern {arxiv_pattern}: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"ADS Response Status: {e.response.status_code}")
-                logger.error(f"ADS Response Body: {e.response.text}")
-                if e.response.status_code == 401:
-                    logger.error("Check if your ADS_API_KEY is valid.")
-            return []
-
-        try:
-            data = response.json()
-        except json.JSONDecodeError:
-            logger.error(f"Failed to decode JSON response from ADS for pattern {arxiv_pattern}: {response.text[:500]}")
-            return []
-
-        papers = []
-        if 'response' not in data or 'docs' not in data['response']:
-            logger.warning(f"Unexpected ADS response format for pattern {arxiv_pattern}")
-            return []
-
-        for doc in data['response']['docs']:
-            identifiers = doc.get('identifier', [])
-            if not isinstance(identifiers, list):
-                identifiers = [identifiers]
-
-            arxiv_id = next(
-                (id_str.split(':')[1] for id_str in identifiers
-                 if isinstance(id_str, str) and id_str.startswith('arXiv:')),
-                None
-            )
-            if arxiv_id and re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", arxiv_id.split('/')[-1]):
-                if 'bibcode' in doc:
-                    papers.append({
+    
+    def get_recent_papers(self, lookback_days: int = 1) -> List[Dict[str, any]]:
+        """Fetch list of JWST-related arXiv papers from ADS using pagination.
+        
+        Args:
+            lookback_days: Number of days to look back from today (default: 1)
+            
+        Returns:
+            List of paper dictionaries with all ADS fields
+        """
+        logger.info(f"Fetching JWST papers from last {lookback_days} day(s) with row-based pagination")
+        
+        # Calculate date ranges
+        dates = self._calculate_date_range(lookback_days)
+        
+        # Build the query string
+        query_parts = [
+            'full:("JWST" OR "Webb Space Telescope" OR "Webb Telescope")',
+            f'entdate:[{dates["entdate_start"]} TO {dates["entdate_end"]}]',
+            f'year:[{dates["year_start"]} TO {dates["year_end"]}]',
+            'bibstem:(arXiv)',
+            f'fulltext_mtime:["{dates["fulltext_mtime_start"]}" TO *]'
+        ]
+        query = ' '.join(query_parts)
+        
+        # Field list from the user's example
+        fields = [
+            'id', 'title', 'abstract', 'keyword', 'bibcode', 'bibstem', 'doi',
+            'author', 'pubdate', 'entdate', 'entry_date', 'first_author', 'pub',
+            'volume', 'page', 'citation_count', 'property', 'orcid_pub',
+            'orcid_user', 'orcid_other', 'aff', 'issue', 'identifier',
+            'fulltext_mtime', 'alternate_bibcode'
+        ]
+        
+        all_papers = []
+        start = 0
+        rows_per_page = 20
+        
+        while True:
+            params = {
+                'q': query,
+                'fl': ','.join(fields),
+                'rows': rows_per_page,
+                'start': start
+            }
+            headers = {'Authorization': f'Bearer {self.api_key}'}
+            
+            logger.info(f"Querying ADS with start={start}, rows={rows_per_page}")
+            
+            try:
+                response = requests.get(self.base_url, params=params, headers=headers, timeout=30)
+                response.raise_for_status()
+            except requests.exceptions.Timeout:
+                logger.error(f"ADS API request timed out at start={start}")
+                break
+            except requests.exceptions.RequestException as e:
+                logger.error(f"ADS API request failed at start={start}: {e}")
+                if hasattr(e, 'response') and e.response is not None:
+                    logger.error(f"ADS Response Status: {e.response.status_code}")
+                    logger.error(f"ADS Response Body: {e.response.text}")
+                    if e.response.status_code == 401:
+                        logger.error("Check if your ADS_API_KEY is valid.")
+                break
+            
+            try:
+                data = response.json()
+            except json.JSONDecodeError:
+                logger.error(f"Failed to decode JSON response from ADS at start={start}: {response.text[:500]}")
+                break
+            
+            if 'response' not in data or 'docs' not in data['response']:
+                logger.warning(f"Unexpected ADS response format at start={start}")
+                break
+            
+            docs = data['response']['docs']
+            num_found = data['response'].get('numFound', 0)
+            logger.info(f"Retrieved {len(docs)} papers (total available: {num_found})")
+            
+            if not docs:
+                # No more results
+                break
+            
+            # Process each document
+            for doc in docs:
+                # Extract arXiv ID from identifiers
+                identifiers = doc.get('identifier', [])
+                if not isinstance(identifiers, list):
+                    identifiers = [identifiers]
+                
+                arxiv_id = None
+                for id_str in identifiers:
+                    if isinstance(id_str, str) and id_str.startswith('arXiv:'):
+                        arxiv_id = id_str.split(':', 1)[1]
+                        break
+                
+                # Validate arXiv ID format
+                if arxiv_id and re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", arxiv_id.split('/')[-1]):
+                    # Store all fields from ADS
+                    paper = {
                         'arxiv_id': arxiv_id,
-                        'bibcode': doc['bibcode'],
-                        'title': doc.get('title', [''])[0] if doc.get('title') else '',
-                        'pubdate': doc.get('pubdate', ''),
-                        'entry_date': doc.get('entry_date', '')
-                    })
-            elif arxiv_id:
-                logger.warning(f"Extracted potential arXiv ID '{arxiv_id}' has unexpected format. Skipping.")
-
-        return papers
-
+                        'arxiv_url': f"https://arxiv.org/abs/{arxiv_id}",
+                        **doc  # Include all ADS fields
+                    }
+                    all_papers.append(paper)
+                elif arxiv_id:
+                    logger.warning(f"Extracted arXiv ID '{arxiv_id}' has unexpected format. Skipping.")
+                else:
+                    logger.debug(f"No valid arXiv ID found in identifiers: {identifiers}")
+            
+            # Check if we've retrieved all results
+            if len(docs) < rows_per_page:
+                # Last page
+                break
+            
+            # Move to next page
+            start += rows_per_page
+        
+        logger.info(f"Found total of {len(all_papers)} JWST papers")
+        return all_papers

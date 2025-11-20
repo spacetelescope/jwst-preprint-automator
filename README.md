@@ -5,10 +5,11 @@ This script classifies whether papers are JWST science papers and checks for pro
 ## Quick start
 There are two main ways to use this JWST Preprint Automation package:
 
-**Batch mode**: `jwst-preprint-analyzer --year-month YYYY-MM`. For example:
+**Batch mode**: `jwst-preprint-analyzer --lookback-days N`. For example:
 
 ```bash
-jwst-preprint-analyzer --year-month 2025-05
+jwst-preprint-analyzer --lookback-days 1  # Analyze papers from the last day
+jwst-preprint-analyzer --lookback-days 7  # Analyze papers from the last week
 ```
 
 **Individual mode**: `jwst-preprint-analyzer --arxiv-id YYMM.NNNNN`. For example:

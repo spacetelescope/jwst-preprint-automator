@@ -25,7 +25,7 @@ class ReportGenerator:
         self.doi_threshold = doi_threshold
         self.model_config = model_config
         
-    def generate_report(self, year_month: str, cache_files: Dict[str, Path], limit_papers: Optional[int] = None) -> Optional[Dict]:
+    def generate_report(self, batch_identifier: str, cache_files: Dict[str, Path], limit_papers: Optional[int] = None) -> Optional[Dict]:
         """Generate a summary report of the analysis."""
         science_results = load_cache(cache_files['science'])
         doi_results = load_cache(cache_files['doi'])
@@ -87,7 +87,7 @@ class ReportGenerator:
 
         metadata = {
             "report_generated": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
-            "year_month_analyzed": year_month,
+            "batch_identifier": batch_identifier,
             "science_threshold": self.science_threshold,
             "doi_threshold": self.doi_threshold,
             **self.model_config
@@ -112,7 +112,7 @@ class ReportGenerator:
             "jwst_science_papers_details": sorted(detailed_results_list, key=lambda x: x['arxiv_id'])
         }
 
-        json_filename = f"{year_month}_report"
+        json_filename = f"{batch_identifier}_report"
         if limit_papers is not None:
             json_filename += f"_limit{limit_papers}"
         json_filename += ".json"
@@ -126,7 +126,7 @@ class ReportGenerator:
         logger.info(f"Report generated: {report_path}")
         
         # Print Summary
-        logger.info(f"--- Summary for {year_month} ---")
+        logger.info(f"--- Summary for {batch_identifier} ---")
         logger.info(f"  Total papers from ADS: {report['summary']['total_papers_identified_from_ads']}")
         logger.info(f"  Skipped (Download/Convert): {report['summary']['papers_skipped_before_analysis']}")
         logger.info(f"  Analysis Failed (LLM/etc): {report['summary']['papers_analysis_failed']}")
@@ -138,8 +138,8 @@ class ReportGenerator:
 
         return report
 
-    def generate_csv_report(self, year_month: str, cache_files: Dict[str, Path], limit_papers: Optional[int] = None) -> Optional[Path]:
-        """Generate a CSV report with ALL papers and their processing status."""
+    def generate_csv_report(self, batch_identifier: str, cache_files: Dict[str, Path], limit_papers: Optional[int] = None) -> Optional[Path]:
+        """Generate a CSV report with ALL papers and their processing status, including all ADS fields."""
         science_results = load_cache(cache_files['science'])
         doi_results = load_cache(cache_files['doi'])
         skipped_results = load_cache(cache_files['skipped'])
@@ -150,14 +150,38 @@ class ReportGenerator:
         csv_data = []
         
         for arxiv_id, paper_info in papers_cache.items():
-            # Start with basic paper info
+            # Helper function to format list fields
+            def format_field(value):
+                if isinstance(value, list):
+                    return "|".join(str(v) for v in value)
+                return value if value is not None else ""
+            
+            # Start with ALL ADS fields from paper_info
             row = {
                 "arxiv_id": arxiv_id,
                 "arxiv_url": paper_info.get("arxiv_url", f"https://arxiv.org/abs/{arxiv_id}"),
-                "paper_title": paper_info.get("title", ""),
+                "paper_title": format_field(paper_info.get("title", "")),
                 "bibcode": paper_info.get("bibcode", ""),
                 "entry_date": paper_info.get("entry_date", ""),
                 "pubdate": paper_info.get("pubdate", ""),
+                "abstract": format_field(paper_info.get("abstract", "")),
+                "keyword": format_field(paper_info.get("keyword", "")),
+                "doi": format_field(paper_info.get("doi", "")),
+                "author": format_field(paper_info.get("author", "")),
+                "first_author": paper_info.get("first_author", ""),
+                "pub": paper_info.get("pub", ""),
+                "volume": paper_info.get("volume", ""),
+                "page": format_field(paper_info.get("page", "")),
+                "citation_count": paper_info.get("citation_count", ""),
+                "property": format_field(paper_info.get("property", "")),
+                "orcid_pub": format_field(paper_info.get("orcid_pub", "")),
+                "orcid_user": format_field(paper_info.get("orcid_user", "")),
+                "orcid_other": format_field(paper_info.get("orcid_other", "")),
+                "aff": format_field(paper_info.get("aff", "")),
+                "issue": paper_info.get("issue", ""),
+                "identifier": format_field(paper_info.get("identifier", "")),
+                "fulltext_mtime": paper_info.get("fulltext_mtime", ""),
+                "alternate_bibcode": format_field(paper_info.get("alternate_bibcode", "")),
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
                 "top_quotes": "",
                 "jwst_sciencescore": 0.0,
@@ -241,16 +265,23 @@ class ReportGenerator:
         csv_data.sort(key=lambda x: x['arxiv_id'])
         
         # Write CSV file
-        csv_filename = f"{year_month}_report"
+        csv_filename = f"{batch_identifier}_report"
         if limit_papers is not None:
             csv_filename += f"_limit{limit_papers}"
         csv_filename += ".csv"
         csv_path = self.results_dir / csv_filename
         try:
             with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-                fieldnames = ["arxiv_id", "arxiv_url", "paper_title", "entry_date", "pubdate",
-                            "top_quotes", "jwst_sciencescore", "jwst_sciencereason",
-                            "jwst_doiscore", "jwst_doireason", "timestamp", "bibcode", "jwst_classification"]
+                # Define all fieldnames including ADS fields
+                fieldnames = [
+                    "arxiv_id", "arxiv_url", "paper_title", "bibcode", "entry_date", "pubdate",
+                    "abstract", "keyword", "doi", "author", "first_author", "pub",
+                    "volume", "page", "citation_count", "property", "orcid_pub",
+                    "orcid_user", "orcid_other", "aff", "issue", "identifier",
+                    "fulltext_mtime", "alternate_bibcode",
+                    "top_quotes", "jwst_sciencescore", "jwst_sciencereason",
+                    "jwst_doiscore", "jwst_doireason", "timestamp", "jwst_classification"
+                ]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames, quoting=csv.QUOTE_NONNUMERIC, doublequote=False, escapechar='\\')
                 writer.writeheader()
                 writer.writerows(csv_data)
