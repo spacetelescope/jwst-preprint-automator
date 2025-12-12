@@ -37,7 +37,7 @@ class JWSTPreprintDOIAnalyzer:
     def __init__(self,
                  output_dir: Path,
                  lookback_days: Optional[int] = None,
-                 arxiv_id: Optional[str] = None, 
+                 arxiv_id: Optional[str] = None,
                  prompts_dir: Path = Path("./prompts"),
                  science_threshold: float = 0.5,
                  doi_threshold: float = 0.8,
@@ -46,14 +46,15 @@ class JWSTPreprintDOIAnalyzer:
                  openai_key: Optional[str] = None,
                  cohere_key: Optional[str] = None,
                  gpt_model: str = 'gpt-4.1-mini-2025-04-14',
-                 cohere_reranker_model: str = 'rerank-v3.5', 
+                 cohere_reranker_model: str = 'rerank-v3.5',
                  top_k_snippets: int = 15,
                  context_sentences: int = 3,
                  validate_llm: bool = False,
                  reprocess: bool = False,
                  skip_doi: bool = False,
                  use_gpt_reranker: bool = True,
-                 limit_papers: Optional[int] = None):
+                 limit_papers: Optional[int] = None,
+                 sort_by: Optional[str] = None):
         """Initialize the JWST paper analyzer."""
         
         # Validate that exactly one mode is provided
@@ -77,6 +78,7 @@ class JWSTPreprintDOIAnalyzer:
         self.skip_doi = skip_doi
         self.use_gpt_reranker = use_gpt_reranker
         self.limit_papers = limit_papers
+        self.sort_by = sort_by
 
         # Setup API keys
         self.ads_key = ads_key or os.getenv('ADS_API_KEY')
@@ -122,22 +124,28 @@ class JWSTPreprintDOIAnalyzer:
             self.gpt_reranker
         )
         
-        # Setup cache files
-        if self.lookback_days is not None:
-            # Use date-based prefix for batch mode
-            from datetime import datetime
-            cache_prefix = datetime.now().strftime('%Y-%m-%d')
-        else:
+        # Setup cache files - use single giant cache files for consistency
+        # Single paper mode still uses separate cache for isolation
+        if self.run_mode == "single":
             cache_prefix = self.single_arxiv_id if self.single_arxiv_id else "single_run"
-            
-        self.cache_files = {
-            'downloaded': self.results_dir / f"{cache_prefix}_downloaded.json",
-            'science': self.results_dir / f"{cache_prefix}_science.json",
-            'doi': self.results_dir / f"{cache_prefix}_dois.json",
-            'skipped': self.results_dir / f"{cache_prefix}_skipped.json",
-            'snippets': self.results_dir / f"{cache_prefix}_snippets.json",
-            'papers': self.results_dir / f"{cache_prefix}_papers.json"
-        }
+            self.cache_files = {
+                'downloaded': self.results_dir / f"{cache_prefix}_downloaded.json",
+                'science': self.results_dir / f"{cache_prefix}_science.json",
+                'doi': self.results_dir / f"{cache_prefix}_dois.json",
+                'skipped': self.results_dir / f"{cache_prefix}_skipped.json",
+                'snippets': self.results_dir / f"{cache_prefix}_snippets.json",
+                'papers': self.results_dir / f"{cache_prefix}_papers.json"
+            }
+        else:
+            # Batch mode: use single consolidated cache files (no date prefix)
+            self.cache_files = {
+                'downloaded': self.results_dir / "cache_downloaded.json",
+                'science': self.results_dir / "cache_science.json",
+                'doi': self.results_dir / "cache_dois.json",
+                'skipped': self.results_dir / "cache_skipped.json",
+                'snippets': self.results_dir / "cache_snippets.json",
+                'papers': self.results_dir / "cache_papers.json"
+            }
         
         # Initialize report generator
         model_config = {
@@ -150,7 +158,7 @@ class JWSTPreprintDOIAnalyzer:
             "prompts_directory": str(self.prompts_dir.resolve()),
         }
         self.report_generator = ReportGenerator(
-            self.results_dir, self.science_threshold, self.doi_threshold, model_config
+            self.results_dir, self.science_threshold, self.doi_threshold, model_config, self.sort_by
         )
 
     def _setup_directories(self):
@@ -344,9 +352,12 @@ class JWSTPreprintDOIAnalyzer:
 
             # Generate final summary report
             self.report_generator.generate_report(batch_identifier, self.cache_files, self.limit_papers)
-            
+
             # Generate CSV report
             self.report_generator.generate_csv_report(batch_identifier, self.cache_files, self.limit_papers)
+
+            # Append to consolidated CSV
+            self.report_generator.append_to_consolidated_csv(self.cache_files)
 
             end_time = time.time()
             logger.info(f"Analysis complete for {batch_identifier} in {end_time - start_time:.2f} seconds.")

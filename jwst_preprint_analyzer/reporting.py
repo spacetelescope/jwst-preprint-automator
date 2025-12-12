@@ -15,15 +15,17 @@ logger = logging.getLogger(__name__)
 class ReportGenerator:
     """Generates analysis reports."""
     
-    def __init__(self, 
+    def __init__(self,
                  results_dir: Path,
                  science_threshold: float,
                  doi_threshold: float,
-                 model_config: Dict[str, str]):
+                 model_config: Dict[str, str],
+                 sort_by: Optional[str] = None):
         self.results_dir = results_dir
         self.science_threshold = science_threshold
         self.doi_threshold = doi_threshold
         self.model_config = model_config
+        self.sort_by = sort_by
         
     def generate_report(self, batch_identifier: str, cache_files: Dict[str, Path], limit_papers: Optional[int] = None) -> Optional[Dict]:
         """Generate a summary report of the analysis."""
@@ -153,8 +155,8 @@ class ReportGenerator:
             # Helper function to format list fields
             def format_field(value):
                 if isinstance(value, list):
-                    return "|".join(str(v) for v in value)
-                return value if value is not None else ""
+                    return "|".join(str(v).replace('\n', ' ').replace('\r', '') for v in value)
+                return str(value).replace('\n', ' ').replace('\r', '') if value is not None else ""
             
             # Start with ALL ADS fields from paper_info
             row = {
@@ -215,9 +217,9 @@ class ReportGenerator:
                     # Handle quotes formatting
                     quotes = science_info.get("quotes", [])
                     if isinstance(quotes, list):
-                        quotes_str = "|".join(quotes)
+                        quotes_str = "|".join(str(q).replace('\n', ' ').replace('\r', '') for q in quotes)
                     else:
-                        quotes_str = str(quotes)
+                        quotes_str = str(quotes).replace('\n', ' ').replace('\r', '')
 
                     row.update({
                         "jwst_sciencescore": science_info.get("jwstscience", 0.0),
@@ -260,10 +262,15 @@ class ReportGenerator:
                 })
             
             csv_data.append(row)
-        
-        # Sort by arxiv_id
-        csv_data.sort(key=lambda x: x['arxiv_id'])
-        
+
+        # Apply optional sorting
+        if self.sort_by:
+            try:
+                csv_data.sort(key=lambda x: x.get(self.sort_by, ''))
+                logger.info(f"CSV data sorted by: {self.sort_by} (ascending)")
+            except Exception as e:
+                logger.warning(f"Failed to sort by '{self.sort_by}': {e}. Using original order.")
+
         # Write CSV file
         csv_filename = f"{batch_identifier}_report"
         if limit_papers is not None:
@@ -274,15 +281,11 @@ class ReportGenerator:
             with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
                 # Define all fieldnames including ADS fields
                 fieldnames = [
-                    "arxiv_id", "arxiv_url", "paper_title", "bibcode", "entry_date", "pubdate",
-                    "abstract", "keyword", "doi", "author", "first_author", "pub",
-                    "volume", "page", "citation_count", "property", "orcid_pub",
-                    "orcid_user", "orcid_other", "aff", "issue", "identifier",
-                    "fulltext_mtime", "alternate_bibcode",
+                    "arxiv_id", "arxiv_url", "paper_title", "bibcode", "first_author",
                     "top_quotes", "jwst_sciencescore", "jwst_sciencereason",
                     "jwst_doiscore", "jwst_doireason", "timestamp", "jwst_classification"
                 ]
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames, quoting=csv.QUOTE_NONNUMERIC, doublequote=False, escapechar='\\')
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore', quoting=csv.QUOTE_NONNUMERIC, doublequote=False, escapechar='\\')
                 writer.writeheader()
                 writer.writerows(csv_data)
                 
@@ -291,4 +294,171 @@ class ReportGenerator:
             
         except Exception as e:
             logger.error(f"Failed to save CSV report file {csv_path}: {e}")
+            return None
+
+    def append_to_consolidated_csv(self, cache_files: Dict[str, Path]) -> Optional[Path]:
+        """Update the consolidated CSV file with ALL papers from cache.
+        
+        This method regenerates the single master CSV file (results/full_report.csv) 
+        from the cache, ensuring all papers are present and sorted correctly.
+        """
+        consolidated_csv_path = self.results_dir / "full_report.csv"
+
+        # Load all cache data
+        science_results = load_cache(cache_files['science'])
+        doi_results = load_cache(cache_files['doi'])
+        skipped_results = load_cache(cache_files['skipped'])
+        downloaded_papers = load_cache(cache_files['downloaded'])
+        papers_cache = load_cache(cache_files['papers'])
+
+        # Create CSV data for ALL papers in the cache
+        csv_data = []
+
+        for arxiv_id, paper_info in papers_cache.items():
+            # Helper function to format list fields
+            def format_field(value):
+                if isinstance(value, list):
+                    return "|".join(str(v).replace('\n', ' ').replace('\r', '') for v in value)
+                return str(value).replace('\n', ' ').replace('\r', '') if value is not None else ""
+
+            # Start with ALL ADS fields from paper_info
+            row = {
+                "arxiv_id": arxiv_id,
+                "arxiv_url": paper_info.get("arxiv_url", f"https://arxiv.org/abs/{arxiv_id}"),
+                "paper_title": format_field(paper_info.get("title", "")),
+                "bibcode": paper_info.get("bibcode", ""),
+                "entry_date": paper_info.get("entry_date", ""),
+                "pubdate": paper_info.get("pubdate", ""),
+                "abstract": format_field(paper_info.get("abstract", "")),
+                "keyword": format_field(paper_info.get("keyword", "")),
+                "doi": format_field(paper_info.get("doi", "")),
+                "author": format_field(paper_info.get("author", "")),
+                "first_author": paper_info.get("first_author", ""),
+                "pub": paper_info.get("pub", ""),
+                "volume": paper_info.get("volume", ""),
+                "page": format_field(paper_info.get("page", "")),
+                "citation_count": paper_info.get("citation_count", ""),
+                "property": format_field(paper_info.get("property", "")),
+                "orcid_pub": format_field(paper_info.get("orcid_pub", "")),
+                "orcid_user": format_field(paper_info.get("orcid_user", "")),
+                "orcid_other": format_field(paper_info.get("orcid_other", "")),
+                "aff": format_field(paper_info.get("aff", "")),
+                "issue": paper_info.get("issue", ""),
+                "identifier": format_field(paper_info.get("identifier", "")),
+                "fulltext_mtime": paper_info.get("fulltext_mtime", ""),
+                "alternate_bibcode": format_field(paper_info.get("alternate_bibcode", "")),
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+                "top_quotes": "",
+                "jwst_sciencescore": 0.0,
+                "jwst_sciencereason": "",
+                "jwst_doiscore": 0.0,
+                "jwst_doireason": "",
+                "jwst_classification": ""
+            }
+
+            # Check if paper was skipped before analysis
+            if arxiv_id in skipped_results:
+                skip_info = skipped_results[arxiv_id]
+                row.update({
+                    "jwst_classification": skip_info.get("reason", ""),
+                    "timestamp": skip_info.get("timestamp", ""),
+                    "jwst_sciencereason": "Skipped before analysis"
+                })
+
+            # Check if paper was downloaded but analysis failed
+            elif arxiv_id in downloaded_papers and arxiv_id not in science_results:
+                row.update({
+                    "jwst_classification": "Analysis failed - no science result",
+                    "jwst_sciencereason": "Analysis failed"
+                })
+
+            # Check if paper had science analysis
+            elif arxiv_id in science_results:
+                science_info = science_results[arxiv_id]
+
+                if isinstance(science_info, dict):
+                    # Handle quotes formatting
+                    quotes = science_info.get("quotes", [])
+                    if isinstance(quotes, list):
+                        quotes_str = "|".join(str(q).replace('\n', ' ').replace('\r', '') for q in quotes)
+                    else:
+                        quotes_str = str(quotes).replace('\n', ' ').replace('\r', '')
+
+                    row.update({
+                        "jwst_sciencescore": science_info.get("jwstscience", 0.0),
+                        "jwst_sciencereason": science_info.get("reason", ""),
+                        "top_quotes": quotes_str
+                    })
+
+                    # Determine status based on science analysis
+                    jwst_score = science_info.get("jwstscience", 0.0)
+                    science_reason = science_info.get("reason", "")
+
+                    if jwst_score < 0:
+                        row["jwst_classification"] = "Science analysis failed"
+                    elif "No relevant keywords" in science_reason:
+                        row["jwst_classification"] = "No JWST keywords found"
+                    elif "reranker score" in science_reason:
+                        row["jwst_classification"] = "Below reranker threshold"
+                    elif jwst_score < self.science_threshold:
+                        row["jwst_classification"] = "Below science threshold"
+                    else:
+                        row["jwst_classification"] = "JWST science paper"
+
+                    # Add DOI information if available
+                    if arxiv_id in doi_results:
+                        doi_info = doi_results[arxiv_id]
+                        if isinstance(doi_info, dict):
+                            row["jwst_doiscore"] = doi_info.get("jwstdoi", 0.0)
+                            row["jwst_doireason"] = doi_info.get("reason", "")
+                else:
+                    row.update({
+                        "jwst_classification": "Invalid science analysis result",
+                        "jwst_sciencereason": "Analysis failed"
+                    })
+
+            # Paper wasn't processed at all
+            else:
+                row.update({
+                    "jwst_classification": "Not processed",
+                    "jwst_sciencereason": "Paper not processed"
+                })
+
+            csv_data.append(row)
+
+        # Apply optional sorting
+        if self.sort_by:
+            try:
+                csv_data.sort(key=lambda x: x.get(self.sort_by, ''))
+                logger.info(f"Consolidated CSV data sorted by: {self.sort_by} (ascending)")
+            except Exception as e:
+                logger.warning(f"Failed to sort by '{self.sort_by}': {e}. Using original order.")
+
+        # Define fieldnames (same as batch CSV)
+        fieldnames = [
+            "arxiv_id", "arxiv_url", "paper_title", "bibcode", "first_author",
+            "top_quotes", "jwst_sciencescore", "jwst_sciencereason",
+            "jwst_doiscore", "jwst_doireason", "timestamp", "jwst_classification"
+        ]
+
+        try:
+            # Always overwrite the file to ensure global sorting and schema consistency
+            with open(consolidated_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(
+                    csvfile,
+                    fieldnames=fieldnames,
+                    extrasaction='ignore',
+                    quoting=csv.QUOTE_NONNUMERIC,
+                    doublequote=False,
+                    escapechar='\\'
+                )
+
+                writer.writeheader()
+                writer.writerows(csv_data)
+
+            logger.info(f"Regenerated consolidated CSV with {len(csv_data)} papers: {consolidated_csv_path}")
+            return consolidated_csv_path
+
+        except Exception as e:
+            logger.error(f"Failed to update consolidated CSV file {consolidated_csv_path}: {e}")
             return None

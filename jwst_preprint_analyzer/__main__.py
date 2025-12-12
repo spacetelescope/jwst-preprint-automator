@@ -108,6 +108,12 @@ def main():
         type=int,
         help="Limit processing to the first N papers (useful for testing). Only applies to batch mode."
     )
+    parser.add_argument(
+        "--sort-by",
+        type=str,
+        default="bibcode",
+        help="Optional field name to sort CSV output by (e.g., 'arxiv_id', 'entry_date', 'pubdate', 'jwst_sciencescore'). If not specified, defaults to 'bibcode' (ascending)."
+    )
     parser.add_argument("--ads-key", help="ADS API key (uses ADS_API_KEY env var if not provided)")
     parser.add_argument("--openai-key", help="OpenAI API key (uses OPENAI_API_KEY env var if not provided)")
     parser.add_argument("--cohere-key", help="Cohere API key (uses COHERE_API_KEY env var if not provided; reranking skipped if missing)")
@@ -145,7 +151,7 @@ def main():
             lookback_days=args.lookback_days,
             arxiv_id=args.arxiv_id,
             output_dir=args.output_dir,
-            prompts_dir=args.prompts_dir, 
+            prompts_dir=args.prompts_dir,
             science_threshold=args.science_threshold,
             doi_threshold=args.doi_threshold,
             reranker_threshold=args.reranker_threshold,
@@ -161,6 +167,7 @@ def main():
             skip_doi=args.skip_doi,
             use_gpt_reranker=not args.no_gpt_reranker,
             limit_papers=args.limit_papers,
+            sort_by=args.sort_by,
         )
 
         if analyzer.run_mode == "batch":
