@@ -1,4 +1,4 @@
-"""GPT-4.1-nano reranker client for replacing Cohere reranking."""
+"""LLM reranker client that scores snippet relevance with yes/no log probabilities."""
 
 import logging
 import math
@@ -8,20 +8,13 @@ from .openai import OpenAIClient
 
 logger = logging.getLogger(__name__)
 
-# YES_TOKEN_ID = 9642  # "Yes" token in `cl100k_base`
-# NO_TOKEN_ID = 2822   # "No" token in `cl100k_base`
-
-YES_TOKEN_ID = 13022 # "Yes" token in `o200k_base` 
-NO_TOKEN_ID = 3160   # "No" token in `o200k_base`  
 
 class GPTReranker:
-    """GPT-4.1-nano based reranker using logit bias and log probabilities."""
+    """OpenAI GPT reranker that scores snippets by the log probability of a 'Yes' answer."""
     
-    def __init__(self, openai_client: OpenAIClient, model: str = 'gpt-4.1-nano-2025-04-14'):
+    def __init__(self, openai_client: OpenAIClient, model: str = 'gpt-6-luna'):
         self.openai_client = openai_client
         self.model = model
-        self.yes_token_id = YES_TOKEN_ID
-        self.no_token_id = NO_TOKEN_ID
     
     def _create_reranking_prompt(self, query: str, snippet: str) -> List[Dict[str, str]]:
         """Create a prompt for yes/no reranking."""
@@ -66,7 +59,7 @@ Is this text snippet relevant to the query? Answer only 'Yes' or 'No'."""
     
     def rerank_snippets(self, query: str, snippets: List[str], 
                        top_k: int) -> List[Dict[str, Union[str, Optional[float]]]]:
-        """Rerank snippets using GPT-4.1-nano with logit bias and log probabilities."""
+        """Rerank snippets by the log probability that the model answers 'Yes' (relevant)."""
         if not snippets:
             return []
         
@@ -86,21 +79,16 @@ Is this text snippet relevant to the query? Answer only 'Yes' or 'No'."""
                 # Create prompt for this snippet
                 messages = self._create_reranking_prompt(query, snippet)
                 
-                # Set up logit bias to constrain to Yes/No
-                logit_bias = {}
-                # Bias towards Yes/No tokens and against others
-                logit_bias[self.yes_token_id] = 0
-                logit_bias[self.no_token_id] = 0
-                
-                # Make API call with logit bias and log probabilities
+                # Reasoning must be disabled for logprobs to be returned. The completion
+                # budget leaves headroom for hidden tokens beyond the single Yes/No answer.
                 response = self.openai_client.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
-                    max_tokens=1,
+                    max_completion_tokens=16,
+                    reasoning_effort="none",
                     temperature=0.4,
                     logprobs=True,
                     top_logprobs=2,
-                    logit_bias=logit_bias if logit_bias else None
                 )
                 
                 # Extract probability score

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class OpenAIClient:
     """Wrapper for OpenAI API interactions."""
     
-    def __init__(self, api_key: str, model: str = 'gpt-4.1-mini-2025-04-14'):
+    def __init__(self, api_key: str, model: str = 'gpt-6.1-terra'):
         self.client = OpenAI(api_key=api_key, max_retries=2)
         self.model = model
         

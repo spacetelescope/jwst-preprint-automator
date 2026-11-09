@@ -29,6 +29,9 @@ from .utils.prompts import load_prompts
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_RERANKER_MODEL = 'gpt-6-luna'
+DEFAULT_SCORING_MODEL = 'gpt-6.1-terra'
+
 
 class JWSTPreprintDOIAnalyzer:
     """Main analyzer class for JWST preprint DOI analysis."""
