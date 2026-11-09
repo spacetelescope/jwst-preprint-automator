@@ -2,11 +2,10 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from ..models import JWSTScienceLabelerModel
 from ..clients.openai import OpenAIClient
-from ..clients.cohere import CohereClient
 from ..clients.gpt_reranker import GPTReranker
 from ..processing.text_extractor import TextExtractor
 
@@ -28,16 +27,14 @@ class ScienceAnalyzer:
     
     def __init__(self, 
                  openai_client: OpenAIClient,
-                 cohere_client: CohereClient,
+                 reranker: GPTReranker,
                  text_extractor: TextExtractor,
                  prompts: Dict[str, str],
                  top_k_snippets: int = 15,
                  reranker_threshold: float = 0.1,
-                 validate_llm: bool = False,
-                 gpt_reranker: Optional[GPTReranker] = None):
+                 validate_llm: bool = False):
         self.openai_client = openai_client
-        self.cohere_client = cohere_client
-        self.gpt_reranker = gpt_reranker
+        self.reranker = reranker
         self.text_extractor = text_extractor
         self.prompts = prompts
         self.top_k_snippets = top_k_snippets
@@ -78,15 +75,9 @@ class ScienceAnalyzer:
             return {"jwstscience": -1.0, "reason": "Analysis failed: Missing rerank science query prompt", 
                    "quotes": [], "error": "prompt_missing"}
 
-        # Use GPT reranker if available, otherwise fall back to Cohere
-        if self.gpt_reranker:
-            reranked_data = self.gpt_reranker.rerank_snippets(
-                rerank_query, all_snippets, self.top_k_snippets
-            )
-        else:
-            reranked_data = self.cohere_client.rerank_snippets(
-                rerank_query, all_snippets, self.top_k_snippets
-            )
+        reranked_data = self.reranker.rerank_snippets(
+            rerank_query, all_snippets, self.top_k_snippets
+        )
 
         if not reranked_data:
             logger.warning(f"Reranking produced no snippets for {arxiv_id}. Skipping LLM analysis.")
