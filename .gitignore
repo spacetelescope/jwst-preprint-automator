@@ -10,3 +10,5 @@ texts/
 
 results*
 CLAUDE.md
+
+*.egg-info/
