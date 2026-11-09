@@ -18,18 +18,18 @@ class TextExtractor:
         self._ensure_nltk_data()
         
     def _ensure_nltk_data(self):
-        """Ensure NLTK punkt tokenizer is available."""
+        """Ensure NLTK punkt_tab tokenizer (required by sent_tokenize) is available."""
         try:
-            nltk.data.find('tokenizers/punkt')
-        except (nltk.downloader.DownloadError, LookupError):
-            logger.info("NLTK 'punkt' tokenizer not found. Attempting download...")
+            nltk.data.find('tokenizers/punkt_tab')
+        except LookupError:
+            logger.info("NLTK 'punkt_tab' tokenizer not found. Attempting download...")
             try:
-                nltk.download('punkt', quiet=True)
-                nltk.data.find('tokenizers/punkt')
-                logger.info("'punkt' tokenizer downloaded successfully.")
+                nltk.download('punkt_tab', quiet=True)
+                nltk.data.find('tokenizers/punkt_tab')
+                logger.info("'punkt_tab' tokenizer downloaded successfully.")
             except Exception as e:
-                logger.error(f"Failed to download NLTK 'punkt' tokenizer: {e}")
-                logger.error("Please install it manually: run `python -c \"import nltk; nltk.download('punkt')\"`")
+                logger.error(f"Failed to download NLTK 'punkt_tab' tokenizer: {e}")
+                logger.error("Please install it manually: run `python -c \"import nltk; nltk.download('punkt_tab')\"`")
                 raise
     
     def extract_relevant_snippets(self, paper_text: str, keywords: List[str]) -> List[str]:
