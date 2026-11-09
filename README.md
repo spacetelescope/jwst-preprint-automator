@@ -45,13 +45,12 @@ source .venv/bin/activate
 pip install -e . # install in editable mode
 ```
 
-The package will automatically download the required NLTK `punkt` tokenizer data on first use.
+The package will automatically download the required NLTK `punkt_tab` tokenizer data on first use.
 
 ### Environment Variables
 Next, you must set a few API keys, which enable the use of LLMs and querying ADS. Create a `.env` file in the project root with the following contents:
 ```bash
 export OPENAI_API_KEY=your_openai_key_here  # Required for all classification use cases
-export COHERE_API_KEY=your_cohere_key_here  # Optional - now only used for legacy reranking (GPT reranker used by default)
 export ADS_API_KEY=your_ads_key_here        # Required for batch mode
 ```
 
@@ -64,14 +63,11 @@ The are many more options that you can view using `jwst-preprint-analyzer -h`. H
 # skip DOI analysis
 jwst-preprint-analyzer --arxiv-id 2501.00089 --skip-doi
 
-# specify the LLM
-jwst-preprint-analyzer --arxiv-id 2503.18791 --gpt-model gpt-4.1-mini-2025-04-14
+# specify the scoring and reranker LLMs
+jwst-preprint-analyzer --arxiv-id 2503.18791 --scoring-model gpt-6.1-terra --reranker-model gpt-6-luna
 
 # reprocess the script and save in different directory
 jwst-preprint-analyzer --arxiv-id 2503.18791 --reprocess --output-dir ./results-reprocessed
-
-# use the legacy Cohere reranker instead of GPT
-jwst-preprint-analyzer --arxiv-id 2503.18791 --no-gpt-reranker
 ```
 
 **Detail options:**
@@ -88,16 +84,14 @@ jwst-preprint-analyzer --arxiv-id 2503.18791 --no-gpt-reranker
 -   `--reprocess`: Force reprocessing of downloaded/analyzed papers, ignoring caches.
 -   `--top-k-snippets TOP_K_SNIPPETS`: Number of top reranked snippets to send to the LLM. Default: `5`.
 -   `--context-sentences CONTEXT_SENTENCES`: Number of sentences before and after a keyword sentence to include in a snippet. Default: `3`.
--   `--cohere-reranker-model COHERE_RERANKER_MODEL`: Cohere reranker model name (when using legacy reranking). Default: `rerank-v3.5`.
--   `--gpt-model GPT_MODEL`: OpenAI GPT model for science and DOI analysis. Default: `gpt-4.1-mini-2025-04-14`.
+-   `--reranker-model RERANKER_MODEL`: OpenAI model used to rerank text snippets by relevance. Default: `gpt-6-luna`.
+-   `--scoring-model SCORING_MODEL`: OpenAI model used to score JWST science and DOIs. Default: `gpt-6.1-terra`.
 -   `--validate-llm`: Perform a second LLM call to validate the first analysis (increases cost/time).
 -   `--skip-doi`: Skip DOI analysis for papers that meet the science threshold.
--   `--no-gpt-reranker`: Use the legacy Cohere reranker instead of the default GPT-4.1-nano reranker.
 
 **API keys:**
 -   `--ads-key ADS_KEY`: ADS API key (optional if `ADS_API_KEY` environment variable is set).
 -   `--openai-key OPENAI_KEY`: OpenAI API key (optional if `OPENAI_API_KEY` environment variable is set).
--   `--cohere-key COHERE_KEY`: Cohere API key (optional if `COHERE_API_KEY` environment variable is set; only needed for legacy reranking).
 
 
 ## Outputs

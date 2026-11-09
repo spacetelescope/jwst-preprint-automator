@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-from .analyzer import JWSTPreprintDOIAnalyzer
+from .analyzer import JWSTPreprintDOIAnalyzer, DEFAULT_RERANKER_MODEL, DEFAULT_SCORING_MODEL
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,14 +79,14 @@ def main():
         help="Number of sentences before and after a keyword sentence to include in a snippet"
     )
     parser.add_argument(
-        "--cohere-reranker-model",
-        default="rerank-v3.5", 
-        help="Cohere reranker model name (when using legacy reranking)"
+        "--reranker-model",
+        default=DEFAULT_RERANKER_MODEL,
+        help="OpenAI model used to rerank text snippets by relevance"
     )
     parser.add_argument(
-        "--gpt-model",
-        default="gpt-4.1-mini-2025-04-14", 
-        help="GPT scoring model for JWST science and DOIs"
+        "--scoring-model",
+        default=DEFAULT_SCORING_MODEL,
+        help="OpenAI model used to score JWST science and DOIs"
     )
     parser.add_argument(
         "--validate-llm",
@@ -97,11 +97,6 @@ def main():
         "--skip-doi",
         action="store_true",
         help="Skip DOI analysis completely, even for papers that meet the science threshold"
-    )
-    parser.add_argument(
-        "--no-gpt-reranker",
-        action="store_true",
-        help="Use the legacy Cohere reranker instead of the default GPT-4.1-nano reranker"
     )
     parser.add_argument(
         "--limit-papers",
@@ -116,7 +111,6 @@ def main():
     )
     parser.add_argument("--ads-key", help="ADS API key (uses ADS_API_KEY env var if not provided)")
     parser.add_argument("--openai-key", help="OpenAI API key (uses OPENAI_API_KEY env var if not provided)")
-    parser.add_argument("--cohere-key", help="Cohere API key (uses COHERE_API_KEY env var if not provided; reranking skipped if missing)")
 
     args = parser.parse_args()
 
@@ -157,15 +151,13 @@ def main():
             reranker_threshold=args.reranker_threshold,
             ads_key=args.ads_key,
             openai_key=args.openai_key,
-            cohere_key=args.cohere_key,
-            gpt_model=args.gpt_model,
-            cohere_reranker_model=args.cohere_reranker_model,
+            scoring_model=args.scoring_model,
+            reranker_model=args.reranker_model,
             top_k_snippets=args.top_k_snippets,
             context_sentences=args.context_sentences,
             validate_llm=args.validate_llm,
             reprocess=args.reprocess,
             skip_doi=args.skip_doi,
-            use_gpt_reranker=not args.no_gpt_reranker,
             limit_papers=args.limit_papers,
             sort_by=args.sort_by,
         )
